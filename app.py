@@ -4412,10 +4412,12 @@ def abrir_navegador():
     webbrowser.open_new("http://127.0.0.1:5000")
 
 if __name__ == '__main__':
-    debug = True
+    frozen = getattr(_sys, 'frozen', False)
+    debug = not frozen
 
-    if "--abrir" in sys.argv and os.environ.get("WERKZEUG_RUN_MAIN") == "true":
-        Timer(1, abrir_navegador).start()
+    if frozen or "--abrir" in sys.argv:
+        if not debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+            Timer(1, abrir_navegador).start()
 
     app.run(debug=debug)
 
