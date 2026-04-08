@@ -41,7 +41,7 @@ def _wl_save(data):
     )
 
 
-def _wl_is_stale(item, minutos=3):
+def _wl_is_stale(item, minutos=15):
     ts = item.get('ultima_busca')
     if not ts:
         return True
@@ -1553,14 +1553,6 @@ HTML_TEMPLATE = '''
 
 
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-left:auto">
-                    <div class="search-form compact" id="compact-search" style="display: none;">
-                    <div style="display: flex; gap: 1rem; align-items: center;">
-                        <input type="text" id="produto-compact" placeholder="Produto..." class="form-input" style="width: 200px;">
-                        <input type="number" id="valor-minimo-compact" placeholder="Valor min..." class="form-input" style="width: 120px;">
-                        <input type="number" id="valor-compact" placeholder="Valor max..." class="form-input" style="width: 120px;">
-                        <button type="button" class="btn btn-primary" onclick="searchFromCompact()">Buscar</button>
-                    </div>
-                </div>
                     <div class="theme-switch" role="group" aria-label="Tema">
                         <button class="theme-switch-btn" id="theme-btn-light" onclick="setTheme('light')" title="Modo claro">☀️</button>
                         <button class="theme-switch-btn" id="theme-btn-dark"  onclick="setTheme('dark')"  title="Modo escuro">🌙</button>
@@ -1793,7 +1785,6 @@ HTML_TEMPLATE = '''
         // DOM Elements
         const searchSection = document.getElementById('search-section');
         const resultsSection = document.getElementById('results-section');
-        const compactSearch = document.getElementById('compact-search');
         const searchForm = document.getElementById('search-form');
         const storeResults = document.getElementById('store-results');
         const totalCount = document.getElementById('total-count');
@@ -1863,7 +1854,7 @@ HTML_TEMPLATE = '''
 
             autoUpdatePaused = true; // pause background auto-updates during manual search
             showResultsSection();
-            updateCompactSearch();
+
             totalCount.textContent = '';
 
             const selectedStores = Object.keys(currentSearch.stores).filter(s => currentSearch.stores[s]);
@@ -2177,26 +2168,6 @@ HTML_TEMPLATE = '''
             return icons[store] || '🏪';
         }
 
-        function updateCompactSearch() {
-            document.getElementById('produto-compact').value = currentSearch.produto;
-            document.getElementById('valor-minimo-compact').value = currentSearch.valor_minimo;
-            document.getElementById('valor-compact').value = currentSearch.valor_maximo;
-            compactSearch.style.display = 'block';
-        }
-
-        function searchFromCompact() {
-            const produto = document.getElementById('produto-compact').value;
-            const valorMin = document.getElementById('valor-minimo-compact').value;
-            const valorMax = document.getElementById('valor-compact').value;
-            
-            if (produto) {
-                currentSearch.produto = produto;
-                currentSearch.valor_minimo = (valorMin === '' || valorMin === null) ? 0 : parseFloat(valorMin);
-                currentSearch.valor_maximo = (valorMax === '' || valorMax === null) ? null : parseFloat(valorMax);
-                performSearch();
-            }
-        }
-
         function resetSearch() {
             if (currentEventSource) {
                 currentEventSource.close();
@@ -2208,7 +2179,6 @@ HTML_TEMPLATE = '''
             document.getElementById('tab-watchlist').classList.remove('active');
             searchSection.style.display = 'block';
             resultsSection.style.display = 'none';
-            compactSearch.style.display = 'none';
         }
 
         
@@ -2503,7 +2473,7 @@ HTML_TEMPLATE = '''
             document.getElementById('tab-watchlist').classList.remove('active');
             document.getElementById('watchlist-section').style.display = 'none';
             showResultsSection();
-            updateCompactSearch();
+
 
             // Compute melhores from cached data
             const todas = Object.values(resultados).flat();
@@ -2581,7 +2551,7 @@ HTML_TEMPLATE = '''
             Object.entries(item.lojas||{}).forEach(([k,v]) => { currentSearch.stores[k] = !!v; });
 
             showResultsSection();
-            updateCompactSearch();
+
             totalCount.textContent = '';
 
             const lojas = Object.entries(item.lojas||{}).filter(([,v])=>v).map(([k])=>k);
