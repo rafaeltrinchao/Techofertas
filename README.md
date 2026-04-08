@@ -93,6 +93,16 @@ TechOfertas/
 
 ---
 
+## Executável (sem instalação)
+
+Se não quiser instalar Python e dependências, basta executar o arquivo `TechOfertas.exe` diretamente. Ele já inclui tudo o que é necessário para rodar.
+
+Após abrir, o servidor sobe automaticamente e você pode acessar `http://127.0.0.1:5000` no navegador.
+
+> O `watchlist.json` será criado na mesma pasta do executável.
+
+---
+
 ## Observações
 
 - O arquivo `watchlist.json` é criado automaticamente na primeira vez que você adiciona um produto à lista de acompanhamento.

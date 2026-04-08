@@ -14,16 +14,21 @@ from pathlib import Path
 from flask import Flask, render_template_string, jsonify, request, Response, stream_with_context, send_file
 from concurrent.futures import ThreadPoolExecutor
 
+# PyInstaller: bundled assets live in sys._MEIPASS; user data lives next to the exe
+import sys as _sys
+_BUNDLE_DIR = Path(getattr(_sys, '_MEIPASS', Path(__file__).parent))
+_DATA_DIR = Path(_sys.executable).parent if getattr(_sys, 'frozen', False) else Path(__file__).parent
+
 app = Flask(__name__)
 
 @app.route('/logo2.png')
 def serve_logo():
-    return send_file(Path(__file__).parent / 'logo2.png', mimetype='image/png')
+    return send_file(_BUNDLE_DIR / 'logo2.png', mimetype='image/png')
 
 # ---------------------------------------------------------------------------
 # Watchlist — persistência local em JSON
 # ---------------------------------------------------------------------------
-WATCHLIST_PATH = Path(__file__).parent / 'watchlist.json'
+WATCHLIST_PATH = _DATA_DIR / 'watchlist.json'
 
 
 def _wl_load():
@@ -560,6 +565,48 @@ HTML_TEMPLATE = '''
             color: white;
         }
 
+        .load-more-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 8px 0 4px;
+        }
+        .load-more-btn {
+            background: none;
+            border: none;
+            color: var(--primary);
+            font-size: 0.8125rem;
+            cursor: pointer;
+            padding: 6px 14px;
+            border-radius: 6px;
+            transition: background 0.15s;
+            font-weight: 500;
+        }
+        .load-more-btn:hover {
+            background: var(--hover-bg, rgba(99,102,241,0.08));
+        }
+        .load-more-count {
+            color: var(--text-muted);
+            font-weight: 400;
+            font-size: 0.75rem;
+            margin-left: 4px;
+        }
+        .load-less-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 0.6875rem;
+            cursor: pointer;
+            padding: 4px 10px;
+            border-radius: 5px;
+            transition: background 0.15s, color 0.15s;
+        }
+        .load-less-btn:hover {
+            background: rgba(127,127,127,0.1);
+            color: var(--text-secondary);
+        }
+
         .search-actions {
             display: flex;
             gap: 1rem;
@@ -801,9 +848,11 @@ HTML_TEMPLATE = '''
         }
 
                  .product-store {
-             font-size: 0.8rem;
-             color: var(--text-secondary);
+             font-size: 0.7rem;
+             color: var(--text-muted);
              font-weight: 500;
+             letter-spacing: 0.02em;
+             margin-top: 2px;
          }
 
                  .product-actions {
@@ -2018,7 +2067,7 @@ HTML_TEMPLATE = '''
             return `
                 <div class="product-card compact">
                     ${imgHTML}
-                    <div class="compact-name" title="${product.nome}">${product.nome}</div>
+                    <div class="compact-name" title="${product.nome}">${product.nome}${product.loja ? ` <span class="product-store">${getStoreDisplayName(product.loja)}</span>` : ''}</div>
                     <div class="compact-price-col">
                         <div class="compact-price-label">à vista</div>
                         <div class="compact-price">R$ ${product.preco.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
@@ -2116,6 +2165,8 @@ HTML_TEMPLATE = '''
             }
             _setBuscarBtn(false);
             _lastSearchResults = {};
+            _melhoresVisibleCount = MELHORES_PAGE_SIZE;
+            _melhoresAllProducts = [];
 
             autoUpdatePaused = true; // pause background auto-updates during manual search
             showResultsSection();
@@ -2325,10 +2376,37 @@ HTML_TEMPLATE = '''
              setupStoreToggles();
          }
 
+        const MELHORES_PAGE_SIZE = 5;
+        let _melhoresVisibleCount = MELHORES_PAGE_SIZE;
+        let _melhoresAllProducts = []; // full array for pagination
+
+        function _melhoresPaginationHTML(total) {
+            const hasMore = total > _melhoresVisibleCount;
+            const canLess = _melhoresVisibleCount > MELHORES_PAGE_SIZE;
+            if (!hasMore && !canLess) return '';
+            const moreBtn = hasMore
+                ? `<button class="load-more-btn" onclick="event.stopPropagation();loadMoreMelhores()">Mais resultados</button>`
+                : '';
+            const lessBtn = canLess
+                ? `<button class="load-less-btn" onclick="event.stopPropagation();loadLessMelhores()">Menos</button>`
+                : '';
+            return `<div class="load-more-wrap">${moreBtn}${lessBtn}</div>`;
+        }
+
         function createStoreSection(storeId, title, products, storeType) {
             const validProducts = products.filter(product => product.preco !== '-');
             const hasProducts = validProducts.length > 0;
-            
+
+            // For "melhores", paginate and cache full array
+            const isMelhores = storeId === 'melhores';
+            let displayProducts = validProducts;
+            let paginationHTML = '';
+            if (isMelhores && hasProducts) {
+                _melhoresAllProducts = validProducts;
+                displayProducts = validProducts.slice(0, _melhoresVisibleCount);
+                paginationHTML = _melhoresPaginationHTML(validProducts.length);
+            }
+
             return `
                 <div class="store-card" id="store-${storeId}">
                     <div class="store-header" onclick="toggleStore('${storeId}')">
@@ -2344,13 +2422,51 @@ HTML_TEMPLATE = '''
                         </button>
                     </div>
                     <div class="store-content" id="content-${storeId}">
-                        <div class="products-grid${_currentLayout === 'compact' ? ' compact' : ''}">
+                        <div class="products-grid${_currentLayout === 'compact' ? ' compact' : ''}" id="grid-${storeId}">
                             ${_currentLayout === 'compact' ? '<div class="compact-header-row"><span></span><span>Produto</span><span>Preço</span><span>Parcelamento</span><span></span></div>' : ''}
-                            ${hasProducts ? validProducts.map(product => _currentLayout === 'compact' ? createProductCardCompact(product) : createProductCard(product)).join('') : createEmptyState(storeType)}
+                            ${hasProducts ? displayProducts.map(product => _currentLayout === 'compact' ? createProductCardCompact(product) : createProductCard(product)).join('') : createEmptyState(storeType)}
                         </div>
+                        ${paginationHTML}
                     </div>
                 </div>
             `;
+        }
+
+        function _melhoresUpdatePagination() {
+            const wrap = document.querySelector('.load-more-wrap');
+            const newHTML = _melhoresPaginationHTML(_melhoresAllProducts.length);
+            if (wrap) {
+                if (newHTML) { wrap.outerHTML = newHTML; } else { wrap.remove(); }
+            } else if (newHTML) {
+                const content = document.getElementById('content-melhores');
+                if (content) content.insertAdjacentHTML('beforeend', newHTML);
+            }
+        }
+
+        function loadMoreMelhores() {
+            _melhoresVisibleCount += MELHORES_PAGE_SIZE;
+            const all = _melhoresAllProducts;
+            if (!all || all.length === 0) return;
+            const grid = document.getElementById('grid-melhores');
+            if (!grid) return;
+            const nextBatch = all.slice(_melhoresVisibleCount - MELHORES_PAGE_SIZE, _melhoresVisibleCount);
+            const html = nextBatch.map(p => _currentLayout === 'compact' ? createProductCardCompact(p) : createProductCard(p)).join('');
+            grid.insertAdjacentHTML('beforeend', html);
+            _melhoresUpdatePagination();
+        }
+
+        function loadLessMelhores() {
+            if (_melhoresVisibleCount <= MELHORES_PAGE_SIZE) return;
+            _melhoresVisibleCount -= MELHORES_PAGE_SIZE;
+            const all = _melhoresAllProducts;
+            if (!all || all.length === 0) return;
+            const grid = document.getElementById('grid-melhores');
+            if (!grid) return;
+            // Re-render grid with fewer items
+            const display = all.slice(0, _melhoresVisibleCount);
+            const headerHTML = _currentLayout === 'compact' ? '<div class="compact-header-row"><span></span><span>Produto</span><span>Preço</span><span>Parcelamento</span><span></span></div>' : '';
+            grid.innerHTML = headerHTML + display.map(p => _currentLayout === 'compact' ? createProductCardCompact(p) : createProductCard(p)).join('');
+            _melhoresUpdatePagination();
         }
 
         function createProductCard(product) {
@@ -2382,12 +2498,12 @@ HTML_TEMPLATE = '''
                     ` : ''}
                     <div class="product-details">
                         <h4 class="product-name">${product.nome}</h4>
+                        ${product.loja ? `<div class="product-store">${getStoreDisplayName(product.loja)}</div>` : ''}
                         <div>
                             <div class="product-price-label">à vista</div>
                             <div class="product-price">R$ ${product.preco.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
                         </div>
                         ${installmentHTML}
-                        ${product.loja ? `<div class="product-store">Loja: ${getStoreDisplayName(product.loja)}</div>` : ''}
                         <div class="product-actions">
                             <button class="btn btn-primary btn-sm" onclick="openProduct('${product.link}')">
                                 Ver Produto
@@ -2597,8 +2713,21 @@ HTML_TEMPLATE = '''
             const idx = watchlistData.findIndex(i => i.id === id);
             if (idx === -1) return;
             const item = watchlistData[idx];
-            if (data.melhor !== undefined) item.melhor_preco = data.melhor;
-            if (data.historico) item.historico = data.historico;
+            if (data.melhor_preco !== undefined) {
+                // Append to local history before overwriting
+                const oldBest = item.melhor_preco;
+                item.melhor_preco = data.melhor_preco;
+                if (data.melhor_preco && typeof data.melhor_preco.preco === 'number') {
+                    const hist = item.historico || [];
+                    hist.push({
+                        ts: new Date().toISOString(),
+                        preco: data.melhor_preco.preco,
+                        loja: data.melhor_preco.loja || ''
+                    });
+                    // Keep last 20 entries
+                    item.historico = hist.slice(-20);
+                }
+            }
             item.ultima_busca = new Date().toISOString();
             item._stale = false;
         }
@@ -2875,6 +3004,8 @@ HTML_TEMPLATE = '''
             Object.entries(item.lojas||{}).forEach(([k,v]) => { currentSearch.stores[k] = !!v; });
 
             showResultsSection();
+            _melhoresVisibleCount = MELHORES_PAGE_SIZE;
+            _melhoresAllProducts = [];
 
             totalCount.textContent = '';
 
@@ -2921,6 +3052,8 @@ HTML_TEMPLATE = '''
                     if (bar) bar.classList.add('done');
                     if (st) st.textContent = '✅ Atualização concluída!';
                     if (data.melhores_ofertas && data.melhores_ofertas.length > 0) {
+                        if (!_currentResults) _currentResults = {};
+                        _currentResults.melhores_ofertas = data.melhores_ofertas;
                         const bc = document.getElementById('best-offers-container');
                         if (bc) { bc.innerHTML = createStoreSection('melhores', '⭐ Melhores Ofertas', data.melhores_ofertas, 'melhores'); const c = document.getElementById('content-melhores'); if (c) c.classList.add('expanded'); }
                     }
@@ -3019,10 +3152,14 @@ HTML_TEMPLATE = '''
             closeRemoveConfirmModal();
             if (!id) return;
             wlCacheClear(id);
+            // Optimistic UI update — remove immediately from view
+            watchlistData = watchlistData.filter(i => i.id !== id);
+            updateWatchlistBadge();
+            renderWatchlist();
             fetch(`/watchlist/${id}`, {method: 'DELETE'})
                 .then(r => r.json())
-                .then(() => { loadWatchlist(); showNotification('Produto removido.', 'info'); })
-                .catch(() => showNotification('Erro ao remover.', 'error'));
+                .then(() => { showNotification('Produto removido.', 'info'); })
+                .catch(() => { loadWatchlist(); showNotification('Erro ao remover.', 'error'); });
         }
 
         // --- Confirm watch from search modal ---
@@ -3613,12 +3750,20 @@ def buscar_kabum(produto, valor_minimo, valor_maximo):
         if not m:
             return [], False
         payload = json.loads(m.group(1))
-        items = (
+        data = (
             payload.get('props', {})
             .get('pageProps', {})
             .get('data', {})
-            .get('catalogServer', {})
-            .get('data')
+        )
+        # Kabum sometimes double-encodes data as a JSON string
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except (json.JSONDecodeError, TypeError):
+                return [], False
+        items = (
+            data.get('catalogServer', {})
+            .get('data') if isinstance(data, dict) else None
         )
         if not isinstance(items, list):
             return [], False
@@ -3945,7 +4090,7 @@ def buscar_todas():
         melhores_ofertas = sorted(
             [o for o in todas_ofertas if o['preco'] != '-'],
             key=lambda x: x['preco']
-        )[:5]
+        )
         result['melhores_ofertas'] = melhores_ofertas
 
         return jsonify(result)
@@ -4060,7 +4205,7 @@ def buscar_stream():
         melhores_finais = sorted(
             [o for o in todas_ofertas if o['preco'] != '-'],
             key=lambda x: x['preco']
-        )[:5]
+        )
         yield f"data: {json.dumps({'type': 'done', 'melhores_ofertas': melhores_finais})}\n\n"
 
     return Response(
@@ -4227,7 +4372,7 @@ def wl_update_one(item_id):
         validas = [o for o in todas_ofertas if isinstance(o.get('preco'), (int, float)) and o['preco'] > 0]
         best = min(validas, key=lambda x: x['preco']) if validas else None
         trend = _wl_salvar_resultado(item_id, best)
-        melhores = sorted(validas, key=lambda x: x['preco'])[:5]
+        melhores = sorted(validas, key=lambda x: x['preco'])
         yield f"data: {json.dumps({'type': 'done', 'id': item_id, 'melhor_preco': best, 'trend': trend, 'todos_resultados': por_loja, 'melhores_ofertas': melhores})}\n\n"
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream',
