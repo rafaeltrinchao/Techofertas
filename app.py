@@ -296,6 +296,7 @@ HTML_TEMPLATE = '''
         }
         [data-theme="dark"] .badge-sem-juros { background: rgb(16 185 129 / 0.18); color: #6ee7b7; }
         [data-theme="dark"] .badge-com-juros { background: rgb(239 68 68 / 0.18); color: #fca5a5; }
+        [data-theme="dark"] .badge-melhor-compra { background: linear-gradient(135deg, rgb(99 102 241 / 0.18), rgb(139 92 246 / 0.18)); color: #a5b4fc; border-color: rgba(129, 140, 248, 0.3); }
         [data-theme="dark"] .trend-down { background: rgb(16 185 129 / 0.18); color: #6ee7b7; }
         [data-theme="dark"] .trend-up   { background: rgb(239 68 68 / 0.18); color: #fca5a5; }
         [data-theme="dark"] .trend-same { background: rgb(100 116 139 / 0.25); color: var(--text-secondary); }
@@ -383,15 +384,10 @@ HTML_TEMPLATE = '''
             margin-right: auto;
             max-width: 820px;
             border: 1px solid var(--border);
-            transition: all 0.3s ease;
             overflow: hidden;
             box-sizing: border-box;
         }
 
-        .search-card:hover {
-            box-shadow: var(--shadow-xl);
-            transform: translateY(-2px);
-        }
 
         .search-title {
             text-align: center;
@@ -792,6 +788,16 @@ HTML_TEMPLATE = '''
             border-radius: 999px;
             background: #fee2e2;
             color: #b91c1c;
+        }
+
+        .badge-melhor-compra {
+            font-size: 0.7rem;
+            font-weight: 600;
+            padding: 0.1rem 0.4rem;
+            border-radius: 999px;
+            background: linear-gradient(135deg, #dbeafe, #ede9fe);
+            color: #4338ca;
+            border: 1px solid rgba(99, 102, 241, 0.25);
         }
 
                  .product-store {
@@ -1584,16 +1590,16 @@ HTML_TEMPLATE = '''
                 <form class="search-form" id="search-form">
                     <div class="form-group">
                         <label for="produto" class="form-label">Produto</label>
-                        <input type="text" id="produto" name="produto" placeholder="Ex: RTX 5060 Ti 16GB" class="form-input" value="RTX 5060 Ti 16GB" required>
+                        <input type="text" id="produto" name="produto" placeholder="Ex: Memoria 16GB" class="form-input" value="" required>
                     </div>
 
                     <div class="form-group">
                         <label for="valor_minimo" class="form-label">Valor Mínimo</label>
-                        <input type="number" id="valor_minimo" name="valor_minimo" placeholder="Informe o valor mínimo" class="form-input" value="0" min="0" step="0.01">
+                        <input type="number" id="valor_minimo" name="valor_minimo" placeholder="Deixe em branco se não houver valor mínimo" class="form-input" value="" min="0" step="0.01">
                     </div>
                     <div class="form-group">
                         <label for="valor_maximo" class="form-label">Valor Máximo</label>
-                        <input type="number" id="valor_maximo" name="valor_maximo" placeholder="Ex: 4000,00 - Deixe vazio para não limitar" class="form-input" value="4000" min="0" step="0.01">
+                        <input type="number" id="valor_maximo" name="valor_maximo" placeholder="Deixe em branco se não houver valor máximo" class="form-input" value="" min="0" step="0.01">
                     </div>
 
                     <div class="stores-section">
@@ -1794,6 +1800,7 @@ HTML_TEMPLATE = '''
             updateThemeButtons(localStorage.getItem('theme') || 'light');
 
             setupEventListeners();
+            loadSearchCache();
             setupScrollToTop();
             checkAutoUpdate();
             document.getElementById('watch-nome').addEventListener('keydown', function(e) {
@@ -1822,9 +1829,36 @@ HTML_TEMPLATE = '''
             });
         }
 
+        function saveSearchCache() {
+            const cache = {
+                produto: currentSearch.produto,
+                valor_minimo: currentSearch.valor_minimo,
+                valor_maximo: currentSearch.valor_maximo,
+                stores: currentSearch.stores
+            };
+            localStorage.setItem('techofertas_last_search', JSON.stringify(cache));
+        }
+
+        function loadSearchCache() {
+            const raw = localStorage.getItem('techofertas_last_search');
+            if (!raw) return;
+            try {
+                const cache = JSON.parse(raw);
+                if (cache.produto) document.getElementById('produto').value = cache.produto;
+                if (cache.valor_minimo) document.getElementById('valor_minimo').value = cache.valor_minimo;
+                if (cache.valor_maximo) document.getElementById('valor_maximo').value = cache.valor_maximo;
+                if (cache.stores) {
+                    document.querySelectorAll('#search-form .store-checkbox').forEach(cb => {
+                        if (cache.stores[cb.value] !== undefined) cb.checked = cache.stores[cb.value];
+                    });
+                }
+                updateStoreSelection();
+            } catch (e) {}
+        }
+
         function handleSearch(e) {
             e.preventDefault();
-            
+
             const formData = new FormData(searchForm);
             currentSearch.produto = formData.get('produto');
             const valorMinimoStr = formData.get('valor_minimo');
@@ -1842,6 +1876,7 @@ HTML_TEMPLATE = '''
                 return;
             }
 
+            saveSearchCache();
             performSearch();
         }
 
@@ -2076,11 +2111,15 @@ HTML_TEMPLATE = '''
             const installmentHTML = product.parcelamento ? (() => {
                 const p = product.parcelamento;
                 const val = p.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2});
-                const total = (p.parcelas * p.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                const totalNum = p.parcelas * p.valor;
+                const total = totalNum.toLocaleString('pt-BR', {minimumFractionDigits: 2});
                 const badge = p.sem_juros
                     ? '<span class="badge-sem-juros">sem juros</span>'
                     : '<span class="badge-com-juros">com juros</span>';
-                return `<div class="product-installment">💳 R$ ${total} &nbsp;·&nbsp; ${p.parcelas}x de R$ ${val} ${badge}</div>`;
+                const melhorCompra = (p.sem_juros && Math.abs(totalNum - product.preco) < 0.02)
+                    ? ' <span class="badge-melhor-compra">mesmo preço à vista</span>'
+                    : '';
+                return `<div class="product-installment">💳 R$ ${total} &nbsp;·&nbsp; ${p.parcelas}x de R$ ${val} ${badge}${melhorCompra}</div>`;
             })() : '';
 
             return `
