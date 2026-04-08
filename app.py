@@ -1625,7 +1625,7 @@ HTML_TEMPLATE = '''
                     </div>
 
                     <div class="search-actions">
-                        <button type="submit" class="btn btn-primary">
+                        <button type="submit" id="btn-buscar" class="btn btn-primary">
                             <span>🔍</span>
                             Buscar Ofertas
                         </button>
@@ -1715,6 +1715,39 @@ HTML_TEMPLATE = '''
         </div>
     </div>
 
+    <!-- Edit Watch Modal -->
+    <div id="edit-watch-modal" class="modal-overlay" style="display:none" onclick="closeEditWatchModal()">
+        <div class="form-modal-box" onclick="event.stopPropagation()">
+            <button class="form-modal-close" onclick="closeEditWatchModal()">✕</button>
+            <h3 class="form-modal-title">Editar produto acompanhado</h3>
+            <div class="form-group">
+                <label class="form-label">Nome do produto *</label>
+                <input type="text" id="edit-watch-nome" class="form-input" placeholder="Ex: RTX 5060 Ti 16GB" autocomplete="off" />
+            </div>
+            <div class="form-group" style="margin-top:1rem">
+                <label class="form-label">Valor Mínimo (R$)</label>
+                <input type="number" id="edit-watch-valor-min" class="form-input" placeholder="Sem limite mínimo" min="0" step="0.01" />
+            </div>
+            <div class="form-group" style="margin-top:1rem">
+                <label class="form-label">Valor Máximo (R$)</label>
+                <input type="number" id="edit-watch-valor-max" class="form-input" placeholder="Sem limite máximo" min="0" step="0.01" />
+            </div>
+            <div class="modal-stores" style="margin-top:1rem">
+                <label class="form-label" style="display:block;margin-bottom:0.5rem">Lojas</label>
+                <div class="stores-grid">
+                    <div class="store-option"><input type="checkbox" id="edit-wl-kabum" class="store-checkbox" value="kabum"><label for="edit-wl-kabum" class="store-label">🟠 KaBuM!</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-pichau" class="store-checkbox" value="pichau"><label for="edit-wl-pichau" class="store-label">🔴 Pichau</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-terabyte" class="store-checkbox" value="terabyte"><label for="edit-wl-terabyte" class="store-label">⚫ Terabyte</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-mercadolivre" class="store-checkbox" value="mercadolivre"><label for="edit-wl-mercadolivre" class="store-label">🟡 Mercado Livre</label></div>
+                </div>
+            </div>
+            <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
+                <button class="btn btn-primary" style="flex:1" onclick="submitEditWatch()">Salvar</button>
+                <button class="btn btn-outline" onclick="closeEditWatchModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Confirm Watch from Search Modal -->
     <div id="confirm-watch-modal" class="confirm-overlay" style="display:none" onclick="closeWatchConfirmModal()">
         <div class="confirm-box" onclick="event.stopPropagation()">
@@ -1764,6 +1797,20 @@ HTML_TEMPLATE = '''
             stores: {}
         };
         let currentEventSource = null;
+        let _lastSearchResults = {}; // accumulates store results during stream
+
+        // ---- session state persistence (F5 resilience) ----
+        const SESSION_KEY = 'techofertas_session';
+        function sessionSave(patch) {
+            try {
+                const cur = JSON.parse(localStorage.getItem(SESSION_KEY) || '{}');
+                localStorage.setItem(SESSION_KEY, JSON.stringify({...cur, ...patch}));
+            } catch(e) {}
+        }
+        function sessionLoad() {
+            try { return JSON.parse(localStorage.getItem(SESSION_KEY) || '{}'); } catch(e) { return {}; }
+        }
+
         // Watch-candidate map: wcId → {nome, preco, link, loja}
         const _wc = {};
         let _wcNext = 0;
@@ -1803,10 +1850,50 @@ HTML_TEMPLATE = '''
             loadSearchCache();
             setupScrollToTop();
             checkAutoUpdate();
+            _restoreSession();
             document.getElementById('watch-nome').addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') submitAddWatch();
             });
         });
+
+        function _restoreSession() {
+            const s = sessionLoad();
+            if (!s || !s.view) return;
+
+            if (s.tab === 'watchlist') {
+                // Watchlist já é carregada pelo checkAutoUpdate — só muda a aba
+                switchTab('watchlist');
+                return;
+            }
+
+            if (s.view === 'results' && s.results && s.search) {
+                // Restaura parâmetros de busca
+                currentSearch.produto = s.search.produto || '';
+                currentSearch.valor_minimo = s.search.valor_minimo || 0;
+                currentSearch.valor_maximo = s.search.valor_maximo != null ? s.search.valor_maximo : null;
+                currentSearch.stores = s.search.stores || {};
+
+                // Preenche os campos do formulário (para o botão Nova Busca funcionar corretamente)
+                document.getElementById('produto').value = currentSearch.produto;
+                document.getElementById('valor_minimo').value = currentSearch.valor_minimo > 0 ? currentSearch.valor_minimo : '';
+                document.getElementById('valor_maximo').value = currentSearch.valor_maximo != null ? currentSearch.valor_maximo : '';
+                document.querySelectorAll('#search-form .store-checkbox').forEach(cb => {
+                    cb.checked = currentSearch.stores[cb.value] !== false;
+                });
+                updateStoreSelection();
+
+                // Renderiza resultados salvos
+                showResultsSection();
+                displayResults(s.results);
+                if (s.totalCount) totalCount.textContent = s.totalCount;
+
+                // Marca barra de status como finalizada
+                const bar = document.getElementById('search-status-bar');
+                const statusText = document.getElementById('status-text');
+                if (bar) bar.classList.add('done');
+                if (statusText) statusText.textContent = '✅ Busca finalizada!';
+            }
+        }
 
         function setupEventListeners() {
             // Form submission
@@ -1880,12 +1967,19 @@ HTML_TEMPLATE = '''
             performSearch();
         }
 
+        function _setBuscarBtn(enabled) {
+            const btn = document.getElementById('btn-buscar');
+            if (btn) btn.disabled = !enabled;
+        }
+
         function performSearch() {
             // Cancela busca anterior se houver
             if (currentEventSource) {
                 currentEventSource.close();
                 currentEventSource = null;
             }
+            _setBuscarBtn(false);
+            _lastSearchResults = {};
 
             autoUpdatePaused = true; // pause background auto-updates during manual search
             showResultsSection();
@@ -1921,11 +2015,13 @@ HTML_TEMPLATE = '''
                     currentEventSource.close();
                     currentEventSource = null;
                     autoUpdatePaused = false;
+                    _setBuscarBtn(true);
                     hideResultsSection();
                     return;
                 }
 
                 if (data.type === 'store') {
+                    _lastSearchResults[data.store] = data.ofertas; // acumula para persistência
                     // Substitui skeleton pelo card real
                     const skeletonCard = document.getElementById(`store-${data.store}`);
                     const titulo = `${getStoreIcon(data.store)} ${getStoreDisplayName(data.store)}`;
@@ -1983,9 +2079,24 @@ HTML_TEMPLATE = '''
                     if (bar) bar.classList.add('done');
                     if (statusText) statusText.textContent = '✅ Busca finalizada!';
 
+                    // Persiste estado completo para sobreviver ao F5
+                    sessionSave({
+                        view: 'results',
+                        tab: 'buscar',
+                        search: {
+                            produto: currentSearch.produto,
+                            valor_minimo: currentSearch.valor_minimo,
+                            valor_maximo: currentSearch.valor_maximo,
+                            stores: {...currentSearch.stores}
+                        },
+                        results: {..._lastSearchResults, melhores_ofertas: data.melhores_ofertas || []},
+                        totalCount: totalCount.textContent
+                    });
+
                     currentEventSource.close();
                     currentEventSource = null;
-                    autoUpdatePaused = false; // resume background auto-updates
+                    autoUpdatePaused = false;
+                    _setBuscarBtn(true);
                 }
             };
 
@@ -1994,7 +2105,8 @@ HTML_TEMPLATE = '''
                     currentEventSource.close();
                     currentEventSource = null;
                 }
-                autoUpdatePaused = false; // resume background auto-updates on error too
+                autoUpdatePaused = false;
+                _setBuscarBtn(true);
                 const bar = document.getElementById('search-status-bar');
                 const statusText = document.getElementById('status-text');
                 if (bar) { bar.style.borderColor = 'rgb(239 68 68 / 0.4)'; bar.style.background = 'rgb(239 68 68 / 0.05)'; }
@@ -2212,6 +2324,9 @@ HTML_TEMPLATE = '''
                 currentEventSource.close();
                 currentEventSource = null;
             }
+            autoUpdatePaused = false;
+            _setBuscarBtn(true);
+            sessionSave({view: 'form', results: null, tab: 'buscar'});
             _activeTab = 'buscar';
             document.getElementById('watchlist-section').style.display = 'none';
             document.getElementById('tab-buscar').classList.add('active');
@@ -2293,6 +2408,8 @@ HTML_TEMPLATE = '''
         let watchlistData = [];
         let watchUpdateSource = null;
         let _activeTab = 'buscar'; // tracks which tab is visible
+        const _updatingIds = new Set(); // items currently being fetched (prevents duplicates)
+        let _updateAllRunning = false;  // true while updateAllWatched SSE is open
 
         function _watchlistVisible() {
             return _activeTab === 'watchlist';
@@ -2304,13 +2421,14 @@ HTML_TEMPLATE = '''
 
         // ---- localStorage result cache ----
         const WL_CACHE_PREFIX = 'wlcache_';
-        const WL_CACHE_TTL = 180000; // 3 minutes (test)
+        const WL_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
 
         function wlCacheSave(itemId, resultados) {
             try {
                 localStorage.setItem(WL_CACHE_PREFIX + itemId, JSON.stringify({ ts: Date.now(), resultados }));
             } catch(e) {}
         }
+        // Usado pela lógica de staleness — respeita TTL
         function wlCacheLoad(itemId) {
             try {
                 const raw = localStorage.getItem(WL_CACHE_PREFIX + itemId);
@@ -2318,6 +2436,14 @@ HTML_TEMPLATE = '''
                 const d = JSON.parse(raw);
                 if (Date.now() - d.ts > WL_CACHE_TTL) { localStorage.removeItem(WL_CACHE_PREFIX + itemId); return null; }
                 return d.resultados;
+            } catch(e) { return null; }
+        }
+        // Usado para visualização — nunca expira o cache, apenas lê o que existe
+        function wlCacheLoadRaw(itemId) {
+            try {
+                const raw = localStorage.getItem(WL_CACHE_PREFIX + itemId);
+                if (!raw) return null;
+                return JSON.parse(raw).resultados || null;
             } catch(e) { return null; }
         }
         function wlCacheClear(itemId) {
@@ -2352,6 +2478,7 @@ HTML_TEMPLATE = '''
 
         function switchTab(tab) {
             _activeTab = tab;
+            sessionSave({tab});
             const isWl = tab === 'watchlist';
             document.getElementById('tab-buscar').classList.toggle('active', !isWl);
             document.getElementById('tab-watchlist').classList.toggle('active', isWl);
@@ -2482,21 +2609,22 @@ HTML_TEMPLATE = '''
                         <div class="watch-item-price">${precoHTML}</div>
                         <div class="watch-item-actions">
                             <button class="btn-icon" draggable="false" onclick='updateWatchItem("${sid}")' title="Atualizar preço">↻</button>
+                            ${!isLink ? `<button class="btn-icon" draggable="false" onclick='openEditWatchModal("${sid}")' title="Editar">✏️</button>` : ''}
                             <button class="btn-icon danger" draggable="false" onclick='openRemoveConfirmModal("${sid}")' title="Remover">✕</button>
                         </div>
                     </div>
                 </div>`;
         }
 
-        // Open results for a query-based watch item
+        // Open results for a query-based watch item — ONLY from cache, never triggers search
         function openWatchResults(id) {
             const item = watchlistData.find(i => i.id === id);
             if (!item || item.link) return;
-            const cached = wlCacheLoad(id);
+            const cached = wlCacheLoadRaw(id); // ignores TTL — visualização não deve disparar busca
             if (cached) {
                 displayWatchResults(item, cached);
             } else {
-                updateWatchItem(id); // triggers streaming UI
+                showNotification('Nenhum resultado em cache. Clique em ↻ para buscar.', 'info');
             }
         }
 
@@ -2531,16 +2659,23 @@ HTML_TEMPLATE = '''
         }
 
         function updateWatchItem(id) {
-            if (watchUpdateSource) { watchUpdateSource.close(); watchUpdateSource = null; }
+            // Nunca iniciar duas buscas simultâneas para o mesmo produto
+            if (_updatingIds.has(id)) return;
+
             const item = watchlistData.find(i => i.id === id);
             if (!item) return;
 
             if (item.link) {
-                // Link-based: background update, spinner on card
+                // Link-based: background update — pode coexistir com outros simples
+                _updatingIds.add(id);
                 _updateWatchSimple(id, item);
             } else {
-                // Query-based: clear cache and show streaming search UI
+                // Query-based: ocupa o watchUpdateSource global
+                // Se updateAll está rodando, cancela e inicia o item específico
+                if (watchUpdateSource) { watchUpdateSource.close(); watchUpdateSource = null; }
+                _updateAllRunning = false;
                 wlCacheClear(id);
+                _updatingIds.add(id);
                 _updateWatchStream(id, item);
             }
         }
@@ -2554,23 +2689,25 @@ HTML_TEMPLATE = '''
                     const sp = document.createElement('div'); sp.className = 'watch-spinner'; actEl.prepend(sp);
                 }
             }
-            watchUpdateSource = new EventSource(`/watchlist/update/${id}`);
-            watchUpdateSource.onmessage = function(evt) {
+            const src = new EventSource(`/watchlist/update/${id}`);
+            src.onmessage = function(evt) {
                 let data; try { data = JSON.parse(evt.data); } catch(e) { return; }
                 if (data.type === 'done' || data.type === 'error') {
-                    watchUpdateSource.close(); watchUpdateSource = null;
+                    src.close();
+                    _updatingIds.delete(id);
                     if (data.type === 'error') {
                         showNotification(data.mensagem || 'Erro ao atualizar.', 'error');
                     } else {
                         _applyUpdateResult(id, data);
-                        renderWatchlist(); // instant UI update
+                        renderWatchlist();
                     }
-                    loadWatchlist(); // background sync
+                    loadWatchlist();
                     scheduleNextAutoUpdate();
                 }
             };
-            watchUpdateSource.onerror = function() {
-                if (watchUpdateSource) { watchUpdateSource.close(); watchUpdateSource = null; }
+            src.onerror = function() {
+                src.close();
+                _updatingIds.delete(id);
                 loadWatchlist();
                 scheduleNextAutoUpdate();
             };
@@ -2627,8 +2764,9 @@ HTML_TEMPLATE = '''
 
                 if (data.type === 'done') {
                     watchUpdateSource.close(); watchUpdateSource = null;
+                    _updatingIds.delete(id);
                     if (data.todos_resultados) wlCacheSave(id, data.todos_resultados);
-                    _applyUpdateResult(id, data); // instant in-memory update
+                    _applyUpdateResult(id, data);
                     updateWatchlistBadge();
                     const bar = document.getElementById('search-status-bar');
                     const st = document.getElementById('status-text');
@@ -2647,11 +2785,13 @@ HTML_TEMPLATE = '''
 
                 if (data.type === 'error') {
                     watchUpdateSource.close(); watchUpdateSource = null;
+                    _updatingIds.delete(id);
                     showNotification(data.mensagem || 'Erro ao atualizar.', 'error');
                 }
             };
             watchUpdateSource.onerror = function() {
                 if (watchUpdateSource) { watchUpdateSource.close(); watchUpdateSource = null; }
+                _updatingIds.delete(id);
                 const st = document.getElementById('status-text');
                 if (st) st.textContent = '⚠️ Erro na conexão.';
             };
@@ -2660,7 +2800,11 @@ HTML_TEMPLATE = '''
         function updateAllWatched(force) {
             // force=true → update every item; force=false/undefined → only stale
             if (typeof force === 'undefined') force = true;
+            // Não iniciar se updateAll já está rodando
+            if (_updateAllRunning) return;
+            // Se tem busca por item específico em curso, aborta (updateAll tem prioridade menor)
             if (watchUpdateSource) { watchUpdateSource.close(); watchUpdateSource = null; }
+            _updateAllRunning = true;
 
             const statusEl = document.getElementById('watchlist-update-status');
             const statusText = document.getElementById('watchlist-status-text');
@@ -2691,16 +2835,18 @@ HTML_TEMPLATE = '''
                 }
                 if (data.type === 'done') {
                     watchUpdateSource.close(); watchUpdateSource = null;
+                    _updateAllRunning = false;
                     if (statusEl) statusEl.style.display = 'none';
                     if (btn) btn.disabled = false;
                     updateWatchlistBadge();
                     if (_watchlistVisible()) renderWatchlist();
-                    loadWatchlist(); // background sync — also re-renders if tab is visible
+                    loadWatchlist();
                     scheduleNextAutoUpdate();
                 }
             };
             watchUpdateSource.onerror = function() {
                 if (watchUpdateSource) { watchUpdateSource.close(); watchUpdateSource = null; }
+                _updateAllRunning = false;
                 if (statusEl) statusEl.style.display = 'none';
                 if (btn) btn.disabled = false;
                 loadWatchlist();
@@ -2800,6 +2946,64 @@ HTML_TEMPLATE = '''
             document.getElementById('add-watch-modal').style.display = 'none';
             document.getElementById('watch-nome').value = '';
             document.getElementById('watch-valor-max').value = '';
+        }
+
+        let _editingWatchId = null;
+
+        function openEditWatchModal(id) {
+            const item = watchlistData.find(i => i.id === id);
+            if (!item) return;
+            _editingWatchId = id;
+            document.getElementById('edit-watch-nome').value = item.query || '';
+            document.getElementById('edit-watch-valor-min').value = item.valor_minimo > 0 ? item.valor_minimo : '';
+            document.getElementById('edit-watch-valor-max').value = item.valor_maximo != null ? item.valor_maximo : '';
+            const lojas = item.lojas || {};
+            ['kabum','pichau','terabyte','mercadolivre'].forEach(s => {
+                const cb = document.getElementById(`edit-wl-${s}`);
+                if (cb) cb.checked = lojas[s] !== false;
+            });
+            document.getElementById('edit-watch-modal').style.display = 'flex';
+            setTimeout(() => document.getElementById('edit-watch-nome').focus(), 50);
+        }
+
+        function closeEditWatchModal() {
+            document.getElementById('edit-watch-modal').style.display = 'none';
+            _editingWatchId = null;
+        }
+
+        function submitEditWatch() {
+            const nome = document.getElementById('edit-watch-nome').value.trim();
+            if (!nome) { showNotification('Informe o nome do produto.', 'error'); return; }
+            const valorMin = document.getElementById('edit-watch-valor-min').value;
+            const valorMax = document.getElementById('edit-watch-valor-max').value;
+            const lojas = {};
+            ['kabum','pichau','terabyte','mercadolivre'].forEach(s => {
+                lojas[s] = document.getElementById(`edit-wl-${s}`).checked;
+            });
+            if (!Object.values(lojas).some(v => v)) { showNotification('Selecione pelo menos uma loja.', 'error'); return; }
+            fetch(`/watchlist/${_editingWatchId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    query: nome,
+                    valor_minimo: valorMin === '' ? 0 : parseFloat(valorMin),
+                    valor_maximo: valorMax === '' ? null : parseFloat(valorMax),
+                    lojas
+                })
+            })
+            .then(r => r.json())
+            .then(d => {
+                if (d.ok) {
+                    const idx = watchlistData.findIndex(i => i.id === _editingWatchId);
+                    if (idx !== -1) watchlistData[idx] = d.item;
+                    closeEditWatchModal();
+                    renderWatchlist();
+                    showNotification('Produto atualizado!', 'success');
+                } else {
+                    showNotification(d.erro || 'Erro ao salvar.', 'error');
+                }
+            })
+            .catch(() => showNotification('Erro ao salvar.', 'error'));
         }
 
         function submitAddWatch() {
@@ -2920,7 +3124,7 @@ HTML_TEMPLATE = '''
 
         let autoUpdatePaused = false;
         let _autoUpdateTimer = null;
-        const STALE_MS = 3 * 60 * 1000; // 3 minutes in ms (test)
+        const STALE_MS = 15 * 60 * 1000; // 15 minutes
 
         // Schedule next auto-update at the exact moment the earliest item becomes stale
         function scheduleNextAutoUpdate() {
@@ -2942,8 +3146,8 @@ HTML_TEMPLATE = '''
             const delay = Math.max(2000, minDelay + 2000);
             _autoUpdateTimer = setTimeout(function() {
                 _autoUpdateTimer = null;
-                if (autoUpdatePaused || watchUpdateSource) {
-                    // Retry in 10s if paused or already updating
+                if (autoUpdatePaused || watchUpdateSource || _updateAllRunning || _updatingIds.size > 0) {
+                    // Retry in 10s if paused or any update already in progress
                     _autoUpdateTimer = setTimeout(scheduleNextAutoUpdate, 10000);
                     return;
                 }
@@ -3411,6 +3615,22 @@ def buscar_terabyte(produto, valor_minimo, valor_maximo):
         return [], False
     return ofertas, encontrou_produtos
 
+def _ml_nome_bate_query(query, nome):
+    """Verifica se todas as especificações numéricas do query estão no nome do produto.
+    Ex: query '16GB' não pode bater com produto '8GB'."""
+    def normalizar(s):
+        s = re.sub(r'[^a-z0-9]', ' ', s.lower())
+        # colapsa "16 gb" → "16gb", "5060 ti" permanece separado
+        s = re.sub(r'(\d+)\s+([a-z]+)', r'\1\2', s)
+        return s
+
+    q = normalizar(query)
+    n = normalizar(nome)
+    # tokens do query que contêm dígitos são as especificações críticas
+    spec_tokens = [t for t in q.split() if re.search(r'\d', t)]
+    return all(t in n for t in spec_tokens)
+
+
 def buscar_mercadolivre(produto, valor_minimo, valor_maximo):
     """Scraping do site lista.mercadolivre.com.br (API pública retorna 403)."""
     ofertas = []
@@ -3432,6 +3652,10 @@ def buscar_mercadolivre(produto, valor_minimo, valor_maximo):
             if not nm:
                 continue
             nome = unescape(re.sub(r'\s+', ' ', nm.group(1).strip()))
+
+            # Filtra produtos que não batem com as especificações da busca (ex: 8GB em vez de 16GB)
+            if not _ml_nome_bate_query(produto, nome):
+                continue
 
             # Link — pega o href completo e limpa tracking/fragment depois
             lm = re.search(r'class="poly-component__title[^"]*">\s*<a[^>]*href="([^"]+)"', bloco)
@@ -3742,6 +3966,24 @@ def wl_add():
         'historico': [],
     }
     wl['items'].append(item)
+    _wl_save(wl)
+    return jsonify({'ok': True, 'item': item})
+
+
+@app.route('/watchlist/<item_id>', methods=['PUT'])
+def wl_edit(item_id):
+    dados = request.get_json(silent=True) or {}
+    query = str(dados.get('query') or '').strip()
+    if not query:
+        return jsonify({'erro': 'Informe o nome do produto.'}), 400
+    wl = _wl_load()
+    item = next((i for i in wl['items'] if i['id'] == item_id), None)
+    if not item:
+        return jsonify({'erro': 'Produto não encontrado.'}), 404
+    item['query'] = query
+    item['valor_minimo'] = dados.get('valor_minimo', 0)
+    item['valor_maximo'] = dados.get('valor_maximo', None)
+    item['lojas'] = dados.get('lojas', item.get('lojas', {}))
     _wl_save(wl)
     return jsonify({'ok': True, 'item': item})
 
