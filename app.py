@@ -1343,6 +1343,81 @@ HTML_TEMPLATE = '''
         }
         .btn-watch:hover { background: rgb(37 99 235 / 0.07); border-color: var(--primary-color); color: var(--primary-color); }
 
+        /* ═══════ Layout Toggle Buttons ═══════ */
+        .layout-toggle { display: flex; align-items: center; gap: 0.35rem; margin-left: auto; margin-right: 0.75rem; }
+        .layout-toggle-label {
+            font-size: 0.72rem; font-weight: 500; color: var(--text-muted);
+            letter-spacing: 0.03em; text-transform: uppercase;
+            padding-right: 0.5rem;
+            border-right: 1px solid var(--border);
+            margin-right: 0.1rem;
+            white-space: nowrap;
+        }
+        .layout-toggle button {
+            background: transparent; border: 1px solid var(--border); border-radius: var(--radius-md);
+            padding: 0.35rem 0.65rem; font-size: 0.78rem; line-height: 1; cursor: pointer;
+            color: var(--text-muted); transition: all 0.15s ease; display: flex; align-items: center; gap: 0.3rem;
+            font-weight: 500; white-space: nowrap;
+        }
+        .layout-toggle button:hover { border-color: var(--primary-color); color: var(--primary-color); }
+        .layout-toggle button.active { background: var(--primary-color); border-color: var(--primary-color); color: #fff; }
+
+        /* ═══════ Compact Layout ═══════ */
+        .products-grid.compact { padding: 0; gap: 0; }
+
+        .product-card.compact {
+            display: grid;
+            grid-template-columns: 36px 1fr 88px 152px 82px;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 0.75rem;
+            border: none; border-bottom: 1px solid var(--border);
+            border-radius: 0; background: var(--surface);
+            transition: background 0.15s ease;
+        }
+        .product-card.compact:last-child { border-bottom: none; }
+        .product-card.compact:hover { background: rgb(37 99 235 / 0.04); transform: none; box-shadow: none; border-color: var(--border); }
+        .products-grid.compact .product-card.compact:nth-child(even) { background: rgba(0,0,0,0.025); }
+        .products-grid.compact .product-card.compact:nth-child(even):hover { background: rgb(37 99 235 / 0.04); }
+
+        .compact-img { width: 36px; height: 36px; object-fit: contain; border-radius: 4px; background: #f8fafc; border: 1px solid var(--border); cursor: pointer; flex-shrink: 0; }
+        .compact-img-placeholder { width: 36px; height: 36px; border-radius: 4px; background: var(--border); flex-shrink: 0; }
+        .compact-name { font-weight: 600; font-size: 0.82rem; color: var(--text-primary); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-width: 0; }
+        .compact-price-col { text-align: right; white-space: nowrap; flex-shrink: 0; }
+        .compact-price { font-size: 0.95rem; font-weight: 700; color: var(--success-color); line-height: 1.2; }
+        .compact-price-label { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+        .compact-installment { font-size: 0.72rem; color: var(--text-secondary); text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 0.1rem; }
+        .compact-melhor-compra { font-size: 0.6rem; color: #4338ca; background: linear-gradient(135deg,#dbeafe,#ede9fe); border: 1px solid rgba(99,102,241,0.25); border-radius: 999px; padding: 0.05rem 0.35rem; font-weight: 600; cursor: default; }
+        [data-theme="dark"] .compact-melhor-compra { background: linear-gradient(135deg,rgb(99 102 241 / 0.18),rgb(139 92 246 / 0.18)); color: #a5b4fc; border-color: rgba(129,140,248,0.3); }
+        .compact-installment .badge-sem-juros, .compact-installment .badge-com-juros, .compact-installment .badge-melhor-compra { font-size: 0.6rem; padding: 0.05rem 0.3rem; }
+        .compact-actions { display: flex; gap: 0.35rem; flex-shrink: 0; }
+        .compact-actions .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.75rem; }
+        .compact-actions .btn-watch { padding: 0.28rem 0.45rem; font-size: 0.72rem; }
+
+        .compact-header-row {
+            display: grid; grid-template-columns: 36px 1fr 88px 152px 82px;
+            gap: 0.75rem; padding: 0.4rem 0.75rem;
+            background: var(--background); border-bottom: 2px solid var(--border);
+            font-size: 0.68rem; font-weight: 600; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .compact-header-row span:nth-child(3),
+        .compact-header-row span:nth-child(4) { text-align: right; }
+
+        [data-theme="dark"] .compact-img { background: #1e293b; border-color: #334155; }
+        [data-theme="dark"] .compact-img-placeholder { background: #334155; }
+        [data-theme="dark"] .products-grid.compact .product-card.compact:nth-child(even) { background: rgba(255,255,255,0.04); }
+
+        @media (max-width: 768px) {
+            .product-card.compact { grid-template-columns: 36px 1fr auto; grid-template-rows: auto auto; gap: 0.35rem 0.5rem; padding: 0.5rem; }
+            .product-card.compact .compact-img, .product-card.compact .compact-img-placeholder { grid-row: 1 / 3; }
+            .product-card.compact .compact-name { grid-column: 2 / 3; grid-row: 1; }
+            .product-card.compact .compact-price-col { grid-column: 3; grid-row: 1; }
+            .product-card.compact .compact-installment { grid-column: 2; grid-row: 2; text-align: left; min-width: 0; }
+            .product-card.compact .compact-actions { grid-column: 3; grid-row: 2; }
+            .compact-header-row { display: none; }
+        }
+
         /* Watchlist empty */
         .watchlist-empty { text-align: center; padding: 4rem 2rem; color: var(--text-secondary); }
         .watchlist-empty .empty-icon { font-size: 3rem; opacity: 0.35; margin-bottom: 1rem; }
@@ -1640,6 +1715,11 @@ HTML_TEMPLATE = '''
                         <h2 class="results-title">Resultados da Busca</h2>
                         <p class="results-count" id="total-count"></p>
                     </div>
+                    <div class="layout-toggle">
+                        <span class="layout-toggle-label">Visualização</span>
+                        <button id="layout-btn-compact" onclick="setLayout('compact')" title="Layout compacto em lista">&#9776; Lista</button>
+                        <button id="layout-btn-default" onclick="setLayout('default')" title="Layout em cards">&#9638; Cards</button>
+                    </div>
                     <button class="btn btn-outline" onclick="resetSearch()">
                         <span>🔄</span>
                         Nova Busca
@@ -1817,7 +1897,7 @@ HTML_TEMPLATE = '''
 
         // ── Theme ──────────────────────────────────────────────────────────
         (function() {
-            const saved = localStorage.getItem('theme') || 'light';
+            const saved = localStorage.getItem('theme') || 'dark';
             document.documentElement.setAttribute('data-theme', saved);
         })();
 
@@ -1844,7 +1924,7 @@ HTML_TEMPLATE = '''
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
-            updateThemeButtons(localStorage.getItem('theme') || 'light');
+            updateThemeButtons(localStorage.getItem('theme') || 'dark');
 
             setupEventListeners();
             loadSearchCache();
@@ -1893,6 +1973,62 @@ HTML_TEMPLATE = '''
                 if (bar) bar.classList.add('done');
                 if (statusText) statusText.textContent = '✅ Busca finalizada!';
             }
+        }
+
+        // ---- Layout toggle ----
+        let _currentLayout = localStorage.getItem('techofertas_layout') || 'compact';
+        let _currentResults = null; // dados da última renderização — necessário para re-renderizar ao trocar layout
+
+        function setLayout(type) {
+            _currentLayout = type;
+            localStorage.setItem('techofertas_layout', type);
+            // Atualiza botões
+            const btnDef = document.getElementById('layout-btn-default');
+            const btnCmp = document.getElementById('layout-btn-compact');
+            if (btnDef) btnDef.classList.toggle('active', type === 'default');
+            if (btnCmp) btnCmp.classList.toggle('active', type === 'compact');
+            // Re-renderiza completamente — os dois layouts têm HTML interno diferente
+            if (_currentResults) displayResults(_currentResults);
+        }
+
+        function initLayout() {
+            const btnDef = document.getElementById('layout-btn-default');
+            const btnCmp = document.getElementById('layout-btn-compact');
+            if (btnDef) btnDef.classList.toggle('active', _currentLayout === 'default');
+            if (btnCmp) btnCmp.classList.toggle('active', _currentLayout === 'compact');
+        }
+
+        function createProductCardCompact(product) {
+            const wcId = ++_wcNext;
+            _wc[wcId] = { nome: product.nome || '', preco: product.preco, link: product.link || '', loja: product.loja || '' };
+            const installmentHTML = product.parcelamento ? (() => {
+                const p = product.parcelamento;
+                const val = p.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                const totalNum = p.parcelas * p.valor;
+                const badge = p.sem_juros
+                    ? '<span class="badge-sem-juros">sem juros</span>'
+                    : '<span class="badge-com-juros">com juros</span>';
+                const melhorCompra = (p.sem_juros && Math.abs(totalNum - product.preco) < 0.02)
+                    ? '<div class="compact-melhor-compra" title="O total parcelado é igual ao preço à vista — você não paga nada a mais parcelando!">=&nbsp;vista</div>' : '';
+                return `<div>${p.parcelas}x R$${val} ${badge}</div>${melhorCompra}`;
+            })() : '<span style="color:var(--text-muted)">--</span>';
+            const imgHTML = product.imagem
+                ? `<img src="${product.imagem}" alt="${product.nome}" class="compact-img" onclick="openImageModal('${product.imagem}')">`
+                : '<div class="compact-img-placeholder"></div>';
+            return `
+                <div class="product-card compact">
+                    ${imgHTML}
+                    <div class="compact-name" title="${product.nome}">${product.nome}</div>
+                    <div class="compact-price-col">
+                        <div class="compact-price-label">à vista</div>
+                        <div class="compact-price">R$ ${product.preco.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
+                    </div>
+                    <div class="compact-installment">${installmentHTML}</div>
+                    <div class="compact-actions">
+                        <button class="btn btn-primary btn-sm" onclick="openProduct('${product.link}')">Ver ↗</button>
+                        <button class="btn-watch" onclick='openWatchConfirmModal(${wcId})' title="Acompanhar preço">👁️</button>
+                    </div>
+                </div>`;
         }
 
         function setupEventListeners() {
@@ -2079,6 +2215,9 @@ HTML_TEMPLATE = '''
                     if (bar) bar.classList.add('done');
                     if (statusText) statusText.textContent = '✅ Busca finalizada!';
 
+                    // Guarda resultados em memória para permitir retorno da aba Acompanhar
+                    _currentResults = {..._lastSearchResults, melhores_ofertas: data.melhores_ofertas || []};
+
                     // Persiste estado completo para sobreviver ao F5
                     sessionSave({
                         view: 'results',
@@ -2089,7 +2228,7 @@ HTML_TEMPLATE = '''
                             valor_maximo: currentSearch.valor_maximo,
                             stores: {...currentSearch.stores}
                         },
-                        results: {..._lastSearchResults, melhores_ofertas: data.melhores_ofertas || []},
+                        results: _currentResults,
                         totalCount: totalCount.textContent
                     });
 
@@ -2148,6 +2287,7 @@ HTML_TEMPLATE = '''
         }
 
                  function displayResults(data) {
+             _currentResults = data; // salva para re-renderizar ao trocar layout
              const selectedStores = Object.keys(currentSearch.stores).filter(store => currentSearch.stores[store]);
              let totalProducts = 0;
              let resultsHTML = '';
@@ -2204,8 +2344,9 @@ HTML_TEMPLATE = '''
                         </button>
                     </div>
                     <div class="store-content" id="content-${storeId}">
-                        <div class="products-grid">
-                            ${hasProducts ? validProducts.map(product => createProductCard(product)).join('') : createEmptyState(storeType)}
+                        <div class="products-grid${_currentLayout === 'compact' ? ' compact' : ''}">
+                            ${_currentLayout === 'compact' ? '<div class="compact-header-row"><span></span><span>Produto</span><span>Preço</span><span>Parcelamento</span><span></span></div>' : ''}
+                            ${hasProducts ? validProducts.map(product => _currentLayout === 'compact' ? createProductCardCompact(product) : createProductCard(product)).join('') : createEmptyState(storeType)}
                         </div>
                     </div>
                 </div>
@@ -2276,10 +2417,10 @@ HTML_TEMPLATE = '''
         }
 
         function setupStoreToggles() {
-            // Auto-expand all sections initially
             document.querySelectorAll('.store-content').forEach(content => {
                 content.classList.add('expanded');
             });
+            initLayout();
         }
 
         function toggleStore(storeId) {
@@ -2340,6 +2481,7 @@ HTML_TEMPLATE = '''
         function showResultsSection() {
             searchSection.style.display = 'none';
             resultsSection.style.display = 'block';
+            initLayout();
         }
 
         function hideResultsSection() {
@@ -2484,8 +2626,14 @@ HTML_TEMPLATE = '''
             document.getElementById('tab-watchlist').classList.toggle('active', isWl);
             document.getElementById('watchlist-section').style.display = isWl ? 'block' : 'none';
             if (!isWl) {
-                const hasResults = resultsSection.style.display !== 'none';
-                searchSection.style.display = hasResults ? 'none' : 'block';
+                if (_currentResults) {
+                    searchSection.style.display = 'none';
+                    resultsSection.style.display = 'block';
+                    initLayout();
+                } else {
+                    searchSection.style.display = 'block';
+                    resultsSection.style.display = 'none';
+                }
             } else {
                 searchSection.style.display = 'none';
                 resultsSection.style.display = 'none';
