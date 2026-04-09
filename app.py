@@ -3810,8 +3810,76 @@ def buscar_kabum(produto, valor_minimo, valor_maximo):
     return ofertas, encontrou_produtos
 
 
-def _pichau_parse_html(html, vistos, produto, valor_minimo, valor_maximo):
-    """Extrai ofertas de uma página de listagem da Pichau."""
+def _pichau_rsc_headers(q, page=1):
+    """Headers para requisição RSC (React Server Components) da Pichau."""
+    params = f'q={q}&pageSize=48'
+    if page > 1:
+        params += f'&page={page}'
+    return {
+        'User-Agent': HTTP_HEADERS['User-Agent'],
+        'Accept': '*/*',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+        'RSC': '1',
+        'Next-Router-State-Tree': '%5B%22%22%2C%7B%22children%22%3A%5B%22search%22%2C%7B%22children%22%3A%5B%22__PAGE__%22%2C%7B%7D%5D%7D%5D%7D%2Cnull%2Cnull%2Ctrue%5D',
+        'Next-Url': f'/search?{params}',
+        'Referer': 'https://www.pichau.com.br/',
+    }
+
+
+def _pichau_parse_rsc(data, produto, valor_minimo, valor_maximo):
+    """Extrai ofertas do payload RSC da Pichau (JSON estruturado)."""
+    ofertas = []
+    m = re.search(r'"items"\s*:\s*(\[.*?\])\s*,\s*"page_info"', data, re.DOTALL)
+    if not m:
+        return [], 0
+    try:
+        items = json.loads(m.group(1))
+    except (json.JSONDecodeError, TypeError):
+        return [], 0
+
+    for item in items:
+        nome = (item.get('name') or '').strip()
+        if not nome:
+            continue
+        if item.get('stock_status') != 'IN_STOCK':
+            continue
+        if not nome_compativel_com_busca(nome, produto):
+            continue
+
+        prices = item.get('pichau_prices') or {}
+        preco_valor = prices.get('avista')
+        if preco_valor is None or preco_valor <= 0:
+            preco_valor = prices.get('final_price')
+        if preco_valor is None or preco_valor <= 0:
+            continue
+        preco_valor = float(preco_valor)
+
+        if not (valor_minimo <= preco_valor <= valor_maximo):
+            continue
+
+        url_key = item.get('url_key') or ''
+        link = f'https://www.pichau.com.br/{url_key}' if url_key else ''
+
+        img_data = item.get('image') or {}
+        imagem = img_data.get('url_listing') or img_data.get('url')
+
+        parcelamento = None
+        max_inst = prices.get('max_installments')
+        min_inst_price = prices.get('min_installment_price')
+        if max_inst and min_inst_price and int(max_inst) >= 2:
+            n_parc = int(max_inst)
+            val_parc = float(min_inst_price)
+            total_parc = n_parc * val_parc
+            final_price = prices.get('final_price') or (preco_valor / 0.85)
+            sem_juros = total_parc <= float(final_price) + 1.0
+            parcelamento = {'parcelas': n_parc, 'valor': val_parc, 'sem_juros': sem_juros}
+
+        ofertas.append({'nome': nome, 'preco': preco_valor, 'link': link, 'imagem': imagem, 'parcelamento': parcelamento})
+    return ofertas, len(items)
+
+
+def _pichau_parse_html_fallback(html, produto, valor_minimo, valor_maximo):
+    """Fallback: extrai ofertas via HTML quando RSC não retorna items (buscas genéricas)."""
     result = []
     partes = re.split(r'(?=<a\s[^>]*data-cy="list-product")', html)
     for parte in partes[1:]:
@@ -3820,13 +3888,10 @@ def _pichau_parse_html(html, vistos, produto, valor_minimo, valor_maximo):
             continue
         href = hm.group(1)
         link = 'https://www.pichau.com.br' + href if href.startswith('/') else href
-        if link in vistos:
-            continue
         h2m = re.search(r'<h2[^>]*>([^<]+)</h2>', parte)
         if not h2m:
             continue
         nome = unescape(re.sub(r'\s+', ' ', h2m.group(1).strip()))
-        # Pichau usa PIX como preço à vista (classe pixPrice). Fallback: price_vista (legado).
         pm = re.search(r'class="[^"]*-pixPrice"[^>]*><span>(R\$[^<]+)</span>', parte)
         if not pm:
             pm = re.search(r'class="[^"]*-price_vista"[^>]*>(R\$[^<]+)<', parte)
@@ -3842,12 +3907,9 @@ def _pichau_parse_html(html, vistos, produto, valor_minimo, valor_maximo):
         imgm = re.search(r'<img[^>]+src="(https://media\.pichau\.com\.br[^"]+)"', parte)
         imagem = imgm.group(1) if imgm else None
         parcelamento = None
-        # Converte o bloco para texto puro (resolve tags React fragmentadas)
-        texto_bloco = re.sub(r'<!--.*?-->', '', parte, flags=re.DOTALL)  # remove React comments
+        texto_bloco = re.sub(r'<!--.*?-->', '', parte, flags=re.DOTALL)
         texto_bloco = re.sub(r'<[^>]+>', ' ', texto_bloco)
         texto_bloco = re.sub(r'\s+', ' ', texto_bloco)
-        # "em até 12 x de R$ 186.27 sem juros no cartão"
-        # \b garante início de número inteiro (evita casar "2" dentro de "12")
         im = re.search(
             r'\b([2-9]|[1-9]\d+)\s*x\s*(?:de\s*)?R\$\s*([\d,.]+)(?:[^0-9]{0,60}?(sem juros))?',
             texto_bloco, re.IGNORECASE,
@@ -3857,26 +3919,37 @@ def _pichau_parse_html(html, vistos, produto, valor_minimo, valor_maximo):
             val_parc = formatar_preco(im.group(2))
             if val_parc:
                 parcelamento = {'parcelas': n_parc, 'valor': val_parc, 'sem_juros': bool(im.group(3))}
-        vistos.add(link)
         result.append({'nome': nome, 'preco': preco_valor, 'link': link, 'imagem': imagem, 'parcelamento': parcelamento})
     return result
 
 
 def buscar_pichau(produto, valor_minimo, valor_maximo):
+    """Busca via RSC flight payload (1 request, JSON estruturado). Fallback: cloudscraper + HTML."""
     ofertas = []
-    vistos = set()
     try:
         q = urllib.parse.quote(produto.strip())
-        url = f'https://www.pichau.com.br/search?q={q}'
+        url = f'https://www.pichau.com.br/search?q={q}&pageSize=48'
+
+        # Tenta RSC primeiro (rápido, sem cloudscraper)
+        try:
+            headers = _pichau_rsc_headers(q)
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = resp.read().decode('utf-8', 'replace')
+            result, total_items = _pichau_parse_rsc(data, produto, valor_minimo, valor_maximo)
+            if total_items > 0:
+                ofertas.extend(result)
+                ofertas.sort(key=lambda x: x['preco'])
+                return ofertas, True
+        except Exception:
+            pass
+
+        # Fallback: cloudscraper + HTML (buscas genéricas que o RSC não suporta)
         scraper = _nova_sessao_scraper()
-
-        html = _scraper_get(scraper, url, 'https://www.pichau.com.br/')
-        encontrou = 'data-cy="list-product"' in html
-        ofertas.extend(_pichau_parse_html(html, vistos, produto, valor_minimo, valor_maximo))
-
-        html2 = _scraper_get(scraper, f'{url}&page=2', url)
-        if html2:
-            ofertas.extend(_pichau_parse_html(html2, vistos, produto, valor_minimo, valor_maximo))
+        html = _scraper_get(scraper, f'https://www.pichau.com.br/search?q={q}', 'https://www.pichau.com.br/')
+        encontrou = 'data-cy="list-product"' in (html or '')
+        if html:
+            ofertas.extend(_pichau_parse_html_fallback(html, produto, valor_minimo, valor_maximo))
 
         ofertas.sort(key=lambda x: x['preco'])
         return ofertas, len(ofertas) > 0 or encontrou
@@ -3885,9 +3958,66 @@ def buscar_pichau(produto, valor_minimo, valor_maximo):
         return [], False
 
 
-def buscar_terabyte(produto, valor_minimo, valor_maximo):
-    """Abre cada produto individualmente (listagem é JS-rendered — preços não confiáveis)."""
+def _terabyte_parse_listagem(html, produto, valor_minimo, valor_maximo):
+    """Extrai ofertas direto da página de listagem da Terabyte (sem abrir cada produto)."""
     ofertas = []
+    cards = re.split(r'(?=<div class="product-item">)', html)
+    for card in cards[1:]:
+        # Pula produtos esgotados
+        if 'tbt_esgotado' in card or _terabyte_produto_indisponivel_listagem(card):
+            continue
+
+        # Nome via <h2> dentro de a.product-item__name
+        nm = re.search(r'class="product-item__name"[^>]*>\s*<h2>([^<]+)</h2>', card)
+        if not nm:
+            continue
+        nome = unescape(re.sub(r'\s+', ' ', nm.group(1).strip()))
+
+        if not nome_compativel_com_busca(nome, produto):
+            continue
+
+        # Link
+        lm = re.search(r'href="(https://www\.terabyteshop\.com\.br/produto/\d+/[^"]+)"', card)
+        if not lm:
+            continue
+        link = lm.group(1).split('"')[0]
+
+        # Preço à vista (product-item__new-price > span)
+        pm = re.search(r'class="product-item__new-price"[^>]*>\s*<span>(R\$\s*[\d.,]+)</span>', card)
+        if not pm:
+            continue
+        preco_valor = formatar_preco(unescape(pm.group(1)))
+        if preco_valor is None:
+            continue
+
+        if not (valor_minimo <= preco_valor <= valor_maximo):
+            continue
+
+        # Imagem
+        imgm = re.search(r'<img[^>]+class="image-thumbnail"[^>]+src="([^"]+)"', card)
+        imagem = imgm.group(1) if imgm else None
+
+        # Parcelamento (product-item__juros)
+        parcelamento = None
+        juros_m = re.search(r'class="product-item__juros"(.*?)</div>', card, re.DOTALL)
+        if juros_m:
+            txt = re.sub(r'<[^>]+>', ' ', juros_m.group(1))
+            txt = re.sub(r'\s+', ' ', txt).strip()
+            im = re.search(r'(\d+)x\s*(?:de\s*)?(R\$\s*[\d.,]+)(?:.*?(sem juros))?', txt, re.IGNORECASE)
+            if im:
+                n_parc = int(im.group(1))
+                val_parc = formatar_preco(im.group(2))
+                if val_parc and n_parc >= 2:
+                    parcelamento = {'parcelas': n_parc, 'valor': val_parc, 'sem_juros': bool(im.group(3))}
+
+        ofertas.append({'nome': nome, 'preco': preco_valor, 'link': link, 'imagem': imagem, 'parcelamento': parcelamento})
+    return ofertas
+
+
+def buscar_terabyte(produto, valor_minimo, valor_maximo):
+    """Extrai preços direto da listagem (1-2 requests em vez de ~22)."""
+    ofertas = []
+    vistos = set()
     encontrou_produtos = False
     try:
         q = urllib.parse.quote_plus(produto.strip())
@@ -3895,23 +4025,21 @@ def buscar_terabyte(produto, valor_minimo, valor_maximo):
 
         scraper = _nova_sessao_scraper()
         html_p1 = _scraper_get(scraper, url_busca, 'https://www.terabyteshop.com.br/')
+        encontrou_produtos = '<div class="product-item">' in (html_p1 or '')
+
+        if html_p1:
+            for o in _terabyte_parse_listagem(html_p1, produto, valor_minimo, valor_maximo):
+                if o['link'] not in vistos:
+                    vistos.add(o['link'])
+                    ofertas.append(o)
+
         html_p2 = _scraper_get(scraper, f'{url_busca}&pagina=2', url_busca) if html_p1 else ''
-        html_total = html_p1 + html_p2
+        if html_p2:
+            for o in _terabyte_parse_listagem(html_p2, produto, valor_minimo, valor_maximo):
+                if o['link'] not in vistos:
+                    vistos.add(o['link'])
+                    ofertas.append(o)
 
-        raw = re.findall(
-            r'href="(https://www\.terabyteshop\.com\.br/produto/\d+/[^"?#]+)',
-            html_total,
-        )
-        links = list(dict.fromkeys(raw))
-        encontrou_produtos = bool(links)
-
-        if not links:
-            return [], False
-
-        max_produtos = 20
-        links = links[:max_produtos]
-        job = (links, url_busca, produto, valor_minimo, valor_maximo, scraper)
-        ofertas = _terabyte_processar_links_sequencial(job)
         ofertas.sort(key=lambda x: x['preco'])
     except Exception as e:
         print(f'Erro Terabyte: {e}')
@@ -3934,8 +4062,37 @@ def _ml_nome_bate_query(query, nome):
     return all(t in n for t in spec_tokens)
 
 
+def _ml_extrair_parcelamentos_html(html):
+    """Extrai mapa de parcelamento do HTML (link -> parcelamento) para enriquecer JSON-LD."""
+    parcelamentos = {}
+    blocos = re.split(r'(?=<li[^>]*class="[^"]*ui-search-layout__item[^"]*")', html)
+    for bloco in blocos[1:]:
+        lm = re.search(r'class="poly-component__title[^"]*">\s*<a[^>]*href="([^"]+)"', bloco)
+        if not lm:
+            continue
+        link = lm.group(1).split('#')[0].split('?')[0]
+        bloco_sem_old = re.sub(r'<s\b[^>]*>.*?</s>', '', bloco, flags=re.DOTALL)
+        inst_block = re.search(
+            r'class="poly-price__installments"[^>]*>(.*?)(?=<div\b|</li>)',
+            bloco_sem_old, re.DOTALL,
+        )
+        if inst_block:
+            txt_inst = re.sub(r'<[^>]+>', ' ', inst_block.group(1))
+            txt_inst = re.sub(r'\s+', ' ', txt_inst).strip()
+            m_inst = re.match(r'(\d+)x\s*R\$\s*([\d\s,]+?)(?:\s+(sem juros))?$', txt_inst, re.IGNORECASE)
+            if m_inst:
+                n_parc = int(m_inst.group(1))
+                val_str = m_inst.group(2).replace(' ', '').replace(',', '.')
+                try:
+                    val_parc = float(val_str)
+                    parcelamentos[link] = {'parcelas': n_parc, 'valor': val_parc, 'sem_juros': bool(m_inst.group(3))}
+                except ValueError:
+                    pass
+    return parcelamentos
+
+
 def buscar_mercadolivre(produto, valor_minimo, valor_maximo):
-    """Scraping do site lista.mercadolivre.com.br (API pública retorna 403)."""
+    """Usa JSON-LD (application/ld+json) para dados estruturados + HTML para parcelamento."""
     ofertas = []
     try:
         slug = urllib.parse.quote(re.sub(r'\s+', '-', produto.strip().lower()), safe='-')
@@ -3946,76 +4103,55 @@ def buscar_mercadolivre(produto, valor_minimo, valor_maximo):
             url += f'_PriceRange_{price_min}BRL-{price_max}BRL'
 
         html = http_get(url, referer='https://www.mercadolivre.com.br/')
-        blocos = re.split(r'(?=<li[^>]*class="[^"]*ui-search-layout__item[^"]*")', html)
-        encontrou = len(blocos) > 1
 
-        for bloco in blocos[1:]:
-            # Nome
-            nm = re.search(r'class="poly-component__title"[^>]*>([^<]+)<', bloco)
-            if not nm:
+        # Tenta JSON-LD primeiro (muito mais robusto)
+        ld_match = re.search(r'<script type="application/ld\+json"[^>]*>(.*?)</script>', html, re.DOTALL)
+        if ld_match:
+            try:
+                ld_data = json.loads(ld_match.group(1))
+                items = ld_data.get('@graph', [])
+            except (json.JSONDecodeError, TypeError):
+                items = []
+        else:
+            items = []
+
+        if not items:
+            # Fallback: sem JSON-LD, retorna vazio (HTML mudou muito)
+            return [], False
+
+        # Extrai parcelamentos do HTML para enriquecer
+        parcelamentos = _ml_extrair_parcelamentos_html(html)
+
+        for item in items:
+            nome = (item.get('name') or '').strip()
+            if not nome:
                 continue
-            nome = unescape(re.sub(r'\s+', ' ', nm.group(1).strip()))
-
-            # Filtra produtos que não batem com as especificações da busca (ex: 8GB em vez de 16GB)
             if not _ml_nome_bate_query(produto, nome):
                 continue
 
-            # Link — pega o href completo e limpa tracking/fragment depois
-            lm = re.search(r'class="poly-component__title[^"]*">\s*<a[^>]*href="([^"]+)"', bloco)
-            if not lm:
+            offers = item.get('offers') or {}
+            preco_valor = offers.get('price')
+            if preco_valor is None:
                 continue
-            link = lm.group(1).split('#')[0].split('?')[0]
-            if not link.startswith('https://'):
-                continue
-
-            # Preço atual: remove preço antigo (<s>), pega "Agora: X reais" ou "X reais"
-            bloco_sem_old = re.sub(r'<s\b[^>]*>.*?</s>', '', bloco, flags=re.DOTALL)
-            pm = re.search(
-                r'aria-label="(?:Agora:\s*)?([\d.,]+) reais(?:\s+com\s+(\d+)\s+centavos)?"',
-                bloco_sem_old,
-            )
-            if not pm:
-                continue
-            preco_str = pm.group(1).replace('.', '').replace(',', '.')
-            if pm.group(2):
-                preco_str += f'.{pm.group(2).zfill(2)}'
             try:
-                preco_valor = float(preco_str)
-            except ValueError:
+                preco_valor = float(preco_valor)
+            except (TypeError, ValueError):
                 continue
 
             if not (valor_minimo <= preco_valor <= valor_maximo):
                 continue
 
-            # Imagem
-            imgm = re.search(r'<img[^>]*class="poly-component__picture"[^>]*src="([^"]+)"', bloco)
-            imagem = imgm.group(1) if imgm else None
+            link = (offers.get('url') or '').split('#')[0].split('?')[0]
+            if not link.startswith('https://'):
+                continue
 
-            # Parcelamento
-            parcelamento = None
-            inst_block = re.search(
-                r'class="poly-price__installments"[^>]*>(.*?)(?=<div\b|</li>)',
-                bloco_sem_old, re.DOTALL,
-            )
-            if inst_block:
-                txt_inst = re.sub(r'<[^>]+>', ' ', inst_block.group(1))
-                txt_inst = re.sub(r'\s+', ' ', txt_inst).strip()
-                # Ex: "12x R$ 461 , 26" ou "10x R$ 879 , 92 sem juros"
-                m_inst = re.match(r'(\d+)x\s*R\$\s*([\d\s,]+?)(?:\s+(sem juros))?$', txt_inst, re.IGNORECASE)
-                if m_inst:
-                    n_parc = int(m_inst.group(1))
-                    val_str = m_inst.group(2).replace(' ', '').replace(',', '.')
-                    try:
-                        val_parc = float(val_str)
-                        sem_juros = bool(m_inst.group(3))
-                        parcelamento = {'parcelas': n_parc, 'valor': val_parc, 'sem_juros': sem_juros}
-                    except ValueError:
-                        pass
+            imagem = item.get('image')
+            parcelamento = parcelamentos.get(link)
 
             ofertas.append({'nome': nome, 'preco': preco_valor, 'link': link, 'imagem': imagem, 'parcelamento': parcelamento})
 
         ofertas.sort(key=lambda x: x['preco'])
-        return ofertas, encontrou
+        return ofertas, len(items) > 0
     except Exception as e:
         print(f'Erro Mercado Livre: {e}')
         return [], False
