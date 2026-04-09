@@ -1831,6 +1831,8 @@ HTML_TEMPLATE = '''
                             <div class="store-option">
                                 <input type="checkbox" id="amazon" class="store-checkbox" value="amazon" checked>
                                 <label for="amazon" class="store-label"><img src="https://www.google.com/s2/favicons?domain=amazon.com.br&sz=32" class="store-label-logo" alt=""> Amazon</label>
+                            </div>
+                            <div class="store-option">
                                 <input type="checkbox" id="shopee" class="store-checkbox" value="shopee" checked>
                                 <label for="shopee" class="store-label"><img src="https://www.google.com/s2/favicons?domain=shopee.com.br&sz=32" class="store-label-logo" alt=""> Shopee</label>
                             </div>
