@@ -1416,7 +1416,7 @@ HTML_TEMPLATE = '''
 
         .product-card.compact {
             display: grid;
-            grid-template-columns: 36px 1fr 88px 152px 82px;
+            grid-template-columns: 36px 1fr 88px 180px 82px;
             align-items: center;
             gap: 0.75rem;
             padding: 0.5rem 0.75rem;
@@ -1435,7 +1435,9 @@ HTML_TEMPLATE = '''
         .compact-price-col { text-align: right; white-space: nowrap; flex-shrink: 0; }
         .compact-price { font-size: 0.95rem; font-weight: 700; color: var(--success-color); line-height: 1.2; }
         .compact-price-label { font-size: 0.6rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-        .compact-installment { font-size: 0.72rem; color: var(--text-secondary); text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 0.1rem; }
+        .compact-installment { font-size: 0.72rem; color: var(--text-secondary); justify-self: end; }
+        .compact-inst-row { display: flex; align-items: center; gap: 0.3rem; }
+        .compact-credit-total { font-weight: 600; color: var(--text-primary); }
         .compact-melhor-compra { font-size: 0.6rem; color: #4338ca; background: linear-gradient(135deg,#dbeafe,#ede9fe); border: 1px solid rgba(99,102,241,0.25); border-radius: 999px; padding: 0.05rem 0.35rem; font-weight: 600; cursor: default; }
         [data-theme="dark"] .compact-melhor-compra { background: linear-gradient(135deg,rgb(99 102 241 / 0.18),rgb(139 92 246 / 0.18)); color: #a5b4fc; border-color: rgba(129,140,248,0.3); }
         .compact-installment .badge-sem-juros, .compact-installment .badge-com-juros, .compact-installment .badge-melhor-compra { font-size: 0.6rem; padding: 0.05rem 0.3rem; }
@@ -1444,7 +1446,7 @@ HTML_TEMPLATE = '''
         .compact-actions .btn-watch { padding: 0.28rem 0.45rem; font-size: 0.72rem; }
 
         .compact-header-row {
-            display: grid; grid-template-columns: 36px 1fr 88px 152px 82px;
+            display: grid; grid-template-columns: 36px 1fr 88px 180px 82px;
             gap: 0.75rem; padding: 0.4rem 0.75rem;
             background: var(--background); border-bottom: 2px solid var(--border);
             font-size: 0.68rem; font-weight: 600; color: var(--text-muted);
@@ -2057,9 +2059,10 @@ HTML_TEMPLATE = '''
                 const badge = p.sem_juros
                     ? '<span class="badge-sem-juros">sem juros</span>'
                     : '<span class="badge-com-juros">com juros</span>';
+                const total = totalNum.toLocaleString('pt-BR', {minimumFractionDigits: 2});
                 const melhorCompra = (p.sem_juros && Math.abs(totalNum - product.preco) < 0.02)
                     ? '<div class="compact-melhor-compra" title="O total parcelado é igual ao preço à vista — você não paga nada a mais parcelando!">=&nbsp;vista</div>' : '';
-                return `<div>${p.parcelas}x R$${val} ${badge}</div>${melhorCompra}`;
+                return `<div class="compact-inst-row"><span class="compact-credit-total">R$ ${total}</span>${badge}</div><div class="compact-inst-row"><span>${p.parcelas}x R$${val}</span>${melhorCompra}</div>`;
             })() : '<span style="color:var(--text-muted)">--</span>';
             const imgHTML = product.imagem
                 ? `<img src="${product.imagem}" alt="${product.nome}" class="compact-img" onclick="openImageModal('${product.imagem}')">`
@@ -2376,7 +2379,7 @@ HTML_TEMPLATE = '''
              setupStoreToggles();
          }
 
-        const MELHORES_PAGE_SIZE = 5;
+        const MELHORES_PAGE_SIZE = 10;
         let _melhoresVisibleCount = MELHORES_PAGE_SIZE;
         let _melhoresAllProducts = []; // full array for pagination
 
@@ -2414,7 +2417,7 @@ HTML_TEMPLATE = '''
                             <div class="store-icon ${storeType}">${getStoreIcon(storeType)}</div>
                             <div class="store-details">
                                 <h3>${title}</h3>
-                                <p class="store-count">${validProducts.length} produto${validProducts.length !== 1 ? 's' : ''}</p>
+                                <p class="store-count">${isMelhores ? '' : validProducts.length + ' produto' + (validProducts.length !== 1 ? 's' : '')}</p>
                             </div>
                         </div>
                         <button class="store-toggle" id="toggle-${storeId}">
@@ -2467,6 +2470,12 @@ HTML_TEMPLATE = '''
             const headerHTML = _currentLayout === 'compact' ? '<div class="compact-header-row"><span></span><span>Produto</span><span>Preço</span><span>Parcelamento</span><span></span></div>' : '';
             grid.innerHTML = headerHTML + display.map(p => _currentLayout === 'compact' ? createProductCardCompact(p) : createProductCard(p)).join('');
             _melhoresUpdatePagination();
+            // Scroll suave — posiciona um pouco acima do conteúdo para mostrar mais do card
+            const storeCard = document.getElementById('store-melhores');
+            if (storeCard) {
+                const y = storeCard.getBoundingClientRect().top + window.scrollY - 120;
+                window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+            }
         }
 
         function createProductCard(product) {
@@ -2905,7 +2914,7 @@ HTML_TEMPLATE = '''
             }
         }
 
-        // Display cached results in search view
+        // Display cached results in search view (same rendering as main search)
         function displayWatchResults(item, resultados) {
             currentSearch.produto = item.query;
             currentSearch.valor_minimo = item.valor_minimo || 0;
@@ -2918,21 +2927,22 @@ HTML_TEMPLATE = '''
             document.getElementById('watchlist-section').style.display = 'none';
             showResultsSection();
 
+            // Reset pagination so displayResults/createStoreSection handles it
+            _melhoresVisibleCount = MELHORES_PAGE_SIZE;
+            _melhoresAllProducts = [];
 
-            // Compute melhores from cached data
+            // Compute melhores from cached data (full list — pagination handled by createStoreSection)
             const todas = Object.values(resultados).flat();
             const validas = todas.filter(o => typeof o.preco === 'number' && o.preco > 0);
-            const melhores = validas.sort((a, b) => a.preco - b.preco).slice(0, 5);
+            const melhores = validas.sort((a, b) => a.preco - b.preco);
             displayResults({ ...resultados, melhores_ofertas: melhores });
 
-            let total = 0;
-            document.querySelectorAll('[id^="content-"]').forEach(el => {
-                if (el.id !== 'content-melhores') total += el.querySelectorAll('.product-card').length;
-            });
+            // Append timestamp if available
             const tsLabel = item.ultima_busca ? formatTimeSince(item.ultima_busca) : '';
-            totalCount.textContent = total > 0
-                ? `${total} produto${total !== 1 ? 's' : ''} encontrado${total !== 1 ? 's' : ''}${tsLabel ? ' · ' + tsLabel : ''}`
-                : '';
+            if (tsLabel) {
+                const current = totalCount.textContent;
+                if (current) totalCount.textContent = current + ' · ' + tsLabel;
+            }
         }
 
         function updateWatchItem(id) {
