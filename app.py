@@ -250,7 +250,7 @@ def _wl_buscar_item(item):
     buscadores = {
         'kabum': buscar_kabum, 'pichau': buscar_pichau,
         'terabyte': buscar_terabyte, 'mercadolivre': buscar_mercadolivre,
-        'magalu': buscar_magalu, 'amazon': buscar_amazon,
+        'magalu': buscar_magalu, 'amazon': buscar_amazon, 'shopee': buscar_shopee,
     }
     lojas = [s for s, v in (item.get('lojas') or {}).items() if v and s in buscadores]
     vm = float(item.get('valor_minimo') or 0)
@@ -1831,6 +1831,8 @@ HTML_TEMPLATE = '''
                             <div class="store-option">
                                 <input type="checkbox" id="amazon" class="store-checkbox" value="amazon" checked>
                                 <label for="amazon" class="store-label"><img src="https://www.google.com/s2/favicons?domain=amazon.com.br&sz=32" class="store-label-logo" alt=""> Amazon</label>
+                                <input type="checkbox" id="shopee" class="store-checkbox" value="shopee" checked>
+                                <label for="shopee" class="store-label"><img src="https://www.google.com/s2/favicons?domain=shopee.com.br&sz=32" class="store-label-logo" alt=""> Shopee</label>
                             </div>
                         </div>
                     </div>
@@ -1924,6 +1926,7 @@ HTML_TEMPLATE = '''
                     <div class="store-option"><input type="checkbox" id="wl-mercadolivre" class="store-checkbox wl-store-checkbox" value="mercadolivre" checked><label for="wl-mercadolivre" class="store-label"><img src="https://www.google.com/s2/favicons?domain=mercadolivre.com.br&sz=32" class="store-label-logo" alt=""> Mercado Livre</label></div>
                     <div class="store-option"><input type="checkbox" id="wl-magalu" class="store-checkbox wl-store-checkbox" value="magalu" checked><label for="wl-magalu" class="store-label"><img src="https://www.google.com/s2/favicons?domain=magazineluiza.com.br&sz=32" class="store-label-logo" alt=""> Magalu</label></div>
                     <div class="store-option"><input type="checkbox" id="wl-amazon" class="store-checkbox wl-store-checkbox" value="amazon" checked><label for="wl-amazon" class="store-label"><img src="https://www.google.com/s2/favicons?domain=amazon.com.br&sz=32" class="store-label-logo" alt=""> Amazon</label></div>
+                    <div class="store-option"><input type="checkbox" id="wl-shopee" class="store-checkbox wl-store-checkbox" value="shopee" checked><label for="wl-shopee" class="store-label"><img src="https://www.google.com/s2/favicons?domain=shopee.com.br&sz=32" class="store-label-logo" alt=""> Shopee</label></div>
                 </div>
             </div>
             <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
@@ -1959,6 +1962,7 @@ HTML_TEMPLATE = '''
                     <div class="store-option"><input type="checkbox" id="edit-wl-mercadolivre" class="store-checkbox" value="mercadolivre"><label for="edit-wl-mercadolivre" class="store-label"><img src="https://www.google.com/s2/favicons?domain=mercadolivre.com.br&sz=32" class="store-label-logo" alt=""> Mercado Livre</label></div>
                     <div class="store-option"><input type="checkbox" id="edit-wl-magalu" class="store-checkbox" value="magalu"><label for="edit-wl-magalu" class="store-label"><img src="https://www.google.com/s2/favicons?domain=magazineluiza.com.br&sz=32" class="store-label-logo" alt=""> Magalu</label></div>
                     <div class="store-option"><input type="checkbox" id="edit-wl-amazon" class="store-checkbox" value="amazon"><label for="edit-wl-amazon" class="store-label"><img src="https://www.google.com/s2/favicons?domain=amazon.com.br&sz=32" class="store-label-logo" alt=""> Amazon</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-shopee" class="store-checkbox" value="shopee"><label for="edit-wl-shopee" class="store-label"><img src="https://www.google.com/s2/favicons?domain=shopee.com.br&sz=32" class="store-label-logo" alt=""> Shopee</label></div>
                 </div>
             </div>
             <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
@@ -2445,7 +2449,7 @@ HTML_TEMPLATE = '''
              }
 
              // Add individual store sections (ordem fixa para consistência)
-             const storeOrder = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon'];
+             const storeOrder = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon', 'shopee'];
              const orderedStores = storeOrder.filter(s => selectedStores.includes(s))
                  .concat(selectedStores.filter(s => !storeOrder.includes(s)));
              orderedStores.forEach(store => {
@@ -2659,12 +2663,15 @@ HTML_TEMPLATE = '''
                 'Mercadolivre': 'Mercado Livre',
                 'magalu': 'Magalu',
                 'amazon': 'Amazon',
+                'shopee': 'Shopee',
                 'melhores': 'Melhores Ofertas'
             };
             return names[store] || store;
         }
 
         function getStoreIcon(store) { return ''; }
+
+        const SHOPEE_DOMAIN = 'shopee.com.br';
 
         function getStoreLogo(store) {
             const domains = {
@@ -2675,6 +2682,7 @@ HTML_TEMPLATE = '''
                 'Mercadolivre': 'mercadolivre.com.br',
                 'magalu': 'magazineluiza.com.br',
                 'amazon': 'amazon.com.br',
+                'shopee': 'shopee.com.br',
             };
             const domain = domains[store];
             if (!domain) return '<span style="line-height:1">⭐</span>';
@@ -4405,12 +4413,117 @@ def buscar_amazon(produto, valor_minimo, valor_maximo):
     return ofertas, encontrou_produtos
 
 
+def buscar_shopee(produto, valor_minimo, valor_maximo):
+    """
+    Busca na Shopee via Googlebot SSR (JSON-LD):
+    - 1 req busca → lista de produtos (nome, imagem, url)
+    - N reqs produto em paralelo → precos via JSON-LD offers
+    """
+    UA_BOT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+
+    def _bot_get(url):
+        try:
+            safe = re.sub(r'[^\x00-\x7F]', '', url)
+            if not safe or len(safe) < 20:
+                p = urllib.parse.urlsplit(url)
+                safe = f"{p.scheme}://{p.netloc}{urllib.parse.quote(p.path, safe='/-_.')}"
+                if p.query:
+                    safe += '?' + p.query
+            req = urllib.request.Request(safe, headers={
+                'User-Agent': UA_BOT,
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'pt-BR,pt;q=0.9',
+            })
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return r.read().decode('utf-8', 'replace')
+        except Exception:
+            return ''
+
+    def _parse_busca(html):
+        produtos = []
+        for bloco in re.findall(r'<script[^>]+type="application/ld\+json"[^>]*>(.*?)</script>', html, re.DOTALL):
+            try:
+                d = json.loads(bloco)
+                if isinstance(d, dict) and d.get('@type') == 'ItemList':
+                    for it in d.get('itemListElement', []):
+                        nome = it.get('name', '').strip()
+                        link = it.get('url', '').strip()
+                        if nome and link:
+                            produtos.append({'nome': nome, 'link': link, 'imagem': it.get('image', ''), 'loja': 'Shopee', 'preco': None})
+            except Exception:
+                pass
+        return produtos
+
+    def _get_preco(prod):
+        html = _bot_get(prod['link'])
+        if not html:
+            return prod
+        for bloco in re.findall(r'<script[^>]+type="application/ld\+json"[^>]*>(.*?)</script>', html, re.DOTALL):
+            try:
+                d = json.loads(bloco)
+                if isinstance(d, dict) and d.get('@type') == 'Product':
+                    offers = d.get('offers', {})
+                    if isinstance(offers, list):
+                        offers = offers[0] if offers else {}
+                    p_raw = offers.get('price') or offers.get('lowPrice')
+                    if p_raw is not None:
+                        preco = float(str(p_raw).replace(',', '.'))
+                        if preco > 0:
+                            prod['preco'] = preco
+                            imagem = d.get('image', '')
+                            if isinstance(imagem, list):
+                                imagem = imagem[0] if imagem else ''
+                            if imagem and not prod.get('imagem'):
+                                prod['imagem'] = str(imagem)
+                            return prod
+            except Exception:
+                pass
+        return prod
+
+    ofertas = []
+    try:
+        url = f'https://shopee.com.br/search?keyword={urllib.parse.quote(produto.strip())}&page=0&sortBy=pop'
+        html_busca = _bot_get(url)
+        if not html_busca:
+            return [], False
+
+        produtos = _parse_busca(html_busca)
+        if not produtos:
+            return [], False
+
+        from concurrent.futures import as_completed as _as_completed
+        com_preco = []
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            futuros = {ex.submit(_get_preco, p): p for p in produtos}
+            for fut in _as_completed(futuros):
+                try:
+                    com_preco.append(fut.result())
+                except Exception:
+                    com_preco.append(futuros[fut])
+
+        for p in com_preco:
+            preco = p.get('preco')
+            if not preco:
+                continue
+            if not nome_compativel_com_busca(p['nome'], produto):
+                continue
+            if not (valor_minimo <= preco <= valor_maximo):
+                continue
+            ofertas.append({'nome': p['nome'], 'preco': preco, 'link': p['link'], 'imagem': p.get('imagem', ''), 'loja': 'Shopee'})
+
+        ofertas.sort(key=lambda x: x['preco'])
+        return ofertas, len(produtos) > 0
+    except Exception as e:
+        print(f'Erro Shopee: {e}')
+        return [], False
+
+
 @app.route('/')
 def home():
     return render_template_string(HTML_TEMPLATE)
 
 def _resposta_busca_vazia(mensagem=None):
-    out = {'kabum': [], 'pichau': [], 'terabyte': [], 'mercadolivre': [], 'magalu': [], 'amazon': [], 'melhores_ofertas': []}
+    out = {'kabum': [], 'pichau': [], 'terabyte': [], 'mercadolivre': [], 'magalu': [], 'amazon': [], 'shopee': [], 'melhores_ofertas': []}
     if mensagem:
         out['erro'] = mensagem
     return jsonify(out)
@@ -4435,11 +4548,11 @@ def buscar_todas():
         valor_maximo = float('inf')
     else:
         valor_maximo = float(valor_maximo)
-    filtros = dados.get('filtros', {'kabum': True, 'pichau': True, 'terabyte': True, 'mercadolivre': True, 'magalu': True, 'amazon': True})
+    filtros = dados.get('filtros', {'kabum': True, 'pichau': True, 'terabyte': True, 'mercadolivre': True, 'magalu': True, 'amazon': True, 'shopee': True})
 
     result = {}
     todas_ofertas = []
-    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon']
+    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon', 'shopee']
     buscadores = {
         'kabum': buscar_kabum,
         'pichau': buscar_pichau,
@@ -4447,6 +4560,7 @@ def buscar_todas():
         'mercadolivre': buscar_mercadolivre,
         'magalu': buscar_magalu,
         'amazon': buscar_amazon,
+        'shopee': buscar_shopee,
     }
 
     def verificar_site(resultados, nome_site, encontrou_produtos):
@@ -4523,7 +4637,7 @@ def buscar_stream():
     except Exception:
         filtros = {s: True for s in ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon']}
 
-    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon']
+    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon', 'shopee']
     lojas_ativas = [s for s in todas_lojas if filtros.get(s)]
 
     if not lojas_ativas:
@@ -4536,6 +4650,7 @@ def buscar_stream():
         'mercadolivre': buscar_mercadolivre,
         'magalu': buscar_magalu,
         'amazon': buscar_amazon,
+        'shopee': buscar_shopee,
     }
 
     def _verificar(resultados, nome_site, encontrou):
@@ -4731,7 +4846,7 @@ def wl_update_one(item_id):
         buscadores = {
             'kabum': buscar_kabum, 'pichau': buscar_pichau,
             'terabyte': buscar_terabyte, 'mercadolivre': buscar_mercadolivre,
-            'magalu': buscar_magalu, 'amazon': buscar_amazon,
+            'magalu': buscar_magalu, 'amazon': buscar_amazon, 'shopee': buscar_shopee,
         }
         lojas = [s for s, v in (item.get('lojas') or {}).items() if v and s in buscadores]
         vm = float(item.get('valor_minimo') or 0)
