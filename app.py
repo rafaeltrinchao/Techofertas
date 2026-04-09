@@ -167,6 +167,54 @@ def _preco_ml_link(url):
     return {'nome': nome, 'preco': preco, 'link': url, 'imagem': imgm.group(1) if imgm else '', 'loja': 'Mercado Livre'}
 
 
+def _preco_magalu_link(url):
+    html = http_get(url, referer='https://www.magazineluiza.com.br/')
+    o = _parse_json_ld(html)
+    if o:
+        o.update({'link': url, 'loja': 'Magalu'})
+        return o
+    m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+    if not m:
+        return None
+    try:
+        data = json.loads(m.group(1))
+        product = data.get('props', {}).get('pageProps', {}).get('data', {}).get('product', {})
+        nome = (product.get('title') or product.get('name') or '').strip()
+        price_data = product.get('price') or {}
+        preco_str = price_data.get('bestPrice') or price_data.get('fullPrice')
+        preco = float(preco_str) if preco_str else None
+        if not preco:
+            return None
+        img = product.get('image') or ''
+        imagem = img.replace('{w}x{h}', '400x400') if '{w}' in img else img
+        return {'nome': nome, 'preco': preco, 'link': url, 'imagem': imagem, 'loja': 'Magalu'}
+    except Exception:
+        return None
+
+
+def _preco_amazon_link(url):
+    scraper = _nova_sessao_scraper()
+    html = _scraper_get(scraper, url, 'https://www.amazon.com.br/')
+    o = _parse_json_ld(html)
+    if o:
+        o.update({'link': url, 'loja': 'Amazon'})
+        return o
+    nm = re.search(r'<span id="productTitle"[^>]*>([^<]+)</span>', html)
+    if not nm:
+        nm = re.search(r'<h1[^>]*>.*?<span[^>]*>([^<]+)</span>', html, re.DOTALL)
+    nome = unescape(nm.group(1).strip()) if nm else ''
+    pm = re.search(r'<span class="a-price"[^>]*>.*?R\$[\s\xa0]*([\d.,]+)', html, re.DOTALL)
+    if not pm:
+        return None
+    preco = formatar_preco(pm.group(1))
+    if not preco:
+        return None
+    imgm = re.search(r'<meta\s+property="og:image"\s+content="([^"]+)"', html)
+    if not imgm:
+        imgm = re.search(r'"hiRes":"(https://m\.media-amazon\.com[^"]+)"', html)
+    return {'nome': nome, 'preco': preco, 'link': url, 'imagem': imgm.group(1) if imgm else '', 'loja': 'Amazon'}
+
+
 def _preco_por_link(url):
     """Dado um URL de produto, retorna oferta atual {nome,preco,link,imagem,loja} ou None."""
     url = url.strip()
@@ -179,6 +227,10 @@ def _preco_por_link(url):
             return _preco_terabyte_link(url)
         if 'mercadolivre.com.br' in url or 'mercadolibre.com' in url:
             return _preco_ml_link(url)
+        if 'magazineluiza.com.br' in url or 'magalu.com' in url:
+            return _preco_magalu_link(url)
+        if 'amazon.com.br' in url:
+            return _preco_amazon_link(url)
     except Exception as e:
         print(f'_preco_por_link {url}: {e}')
     return None
@@ -198,6 +250,7 @@ def _wl_buscar_item(item):
     buscadores = {
         'kabum': buscar_kabum, 'pichau': buscar_pichau,
         'terabyte': buscar_terabyte, 'mercadolivre': buscar_mercadolivre,
+        'magalu': buscar_magalu, 'amazon': buscar_amazon,
     }
     lojas = [s for s, v in (item.get('lojas') or {}).items() if v and s in buscadores]
     vm = float(item.get('valor_minimo') or 0)
@@ -703,6 +756,8 @@ HTML_TEMPLATE = '''
         .store-icon.pichau { background: #dc2626; }
         .store-icon.terabyte { background: #334155; }
         .store-icon.mercadolivre { background: #f3a00e; }
+        .store-icon.magalu { background: #0086ff; }
+        .store-icon.amazon { background: #ff9900; }
         .store-icon.melhores { background: var(--accent-color); }
         [data-theme="dark"] .store-icon.terabyte { background: #475569; }
 
@@ -1747,6 +1802,14 @@ HTML_TEMPLATE = '''
                                 <input type="checkbox" id="mercadolivre" class="store-checkbox" value="mercadolivre" checked>
                                 <label for="mercadolivre" class="store-label">🟡 Mercado Livre</label>
                             </div>
+                            <div class="store-option">
+                                <input type="checkbox" id="magalu" class="store-checkbox" value="magalu" checked>
+                                <label for="magalu" class="store-label">🔵 Magalu</label>
+                            </div>
+                            <div class="store-option">
+                                <input type="checkbox" id="amazon" class="store-checkbox" value="amazon" checked>
+                                <label for="amazon" class="store-label">🟠 Amazon</label>
+                            </div>
                         </div>
                     </div>
 
@@ -1837,6 +1900,8 @@ HTML_TEMPLATE = '''
                     <div class="store-option"><input type="checkbox" id="wl-pichau" class="store-checkbox wl-store-checkbox" value="pichau" checked><label for="wl-pichau" class="store-label">🔴 Pichau</label></div>
                     <div class="store-option"><input type="checkbox" id="wl-terabyte" class="store-checkbox wl-store-checkbox" value="terabyte" checked><label for="wl-terabyte" class="store-label">⚫ Terabyte</label></div>
                     <div class="store-option"><input type="checkbox" id="wl-mercadolivre" class="store-checkbox wl-store-checkbox" value="mercadolivre" checked><label for="wl-mercadolivre" class="store-label">🟡 Mercado Livre</label></div>
+                    <div class="store-option"><input type="checkbox" id="wl-magalu" class="store-checkbox wl-store-checkbox" value="magalu" checked><label for="wl-magalu" class="store-label">🔵 Magalu</label></div>
+                    <div class="store-option"><input type="checkbox" id="wl-amazon" class="store-checkbox wl-store-checkbox" value="amazon" checked><label for="wl-amazon" class="store-label">🟠 Amazon</label></div>
                 </div>
             </div>
             <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
@@ -1870,6 +1935,8 @@ HTML_TEMPLATE = '''
                     <div class="store-option"><input type="checkbox" id="edit-wl-pichau" class="store-checkbox" value="pichau"><label for="edit-wl-pichau" class="store-label">🔴 Pichau</label></div>
                     <div class="store-option"><input type="checkbox" id="edit-wl-terabyte" class="store-checkbox" value="terabyte"><label for="edit-wl-terabyte" class="store-label">⚫ Terabyte</label></div>
                     <div class="store-option"><input type="checkbox" id="edit-wl-mercadolivre" class="store-checkbox" value="mercadolivre"><label for="edit-wl-mercadolivre" class="store-label">🟡 Mercado Livre</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-magalu" class="store-checkbox" value="magalu"><label for="edit-wl-magalu" class="store-label">🔵 Magalu</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-amazon" class="store-checkbox" value="amazon"><label for="edit-wl-amazon" class="store-label">🟠 Amazon</label></div>
                 </div>
             </div>
             <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
@@ -2356,7 +2423,7 @@ HTML_TEMPLATE = '''
              }
 
              // Add individual store sections (ordem fixa para consistência)
-             const storeOrder = ['kabum', 'pichau', 'terabyte', 'mercadolivre'];
+             const storeOrder = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon'];
              const orderedStores = storeOrder.filter(s => selectedStores.includes(s))
                  .concat(selectedStores.filter(s => !storeOrder.includes(s)));
              orderedStores.forEach(store => {
@@ -2530,6 +2597,8 @@ HTML_TEMPLATE = '''
                 'pichau': 'Nenhuma oferta encontrada na Pichau',
                 'terabyte': 'Nenhuma oferta encontrada na Terabyte',
                 'mercadolivre': 'Nenhuma oferta encontrada no Mercado Livre',
+                'magalu': 'Nenhuma oferta encontrada no Magalu',
+                'amazon': 'Nenhuma oferta encontrada na Amazon',
                 'melhores': 'Nenhuma oferta encontrada'
             };
 
@@ -2568,6 +2637,8 @@ HTML_TEMPLATE = '''
                 'terabyte': 'Terabyte',
                 'mercadolivre': 'Mercado Livre',
                 'Mercadolivre': 'Mercado Livre',
+                'magalu': 'Magalu',
+                'amazon': 'Amazon',
                 'melhores': 'Melhores Ofertas'
             };
             return names[store] || store;
@@ -2580,6 +2651,8 @@ HTML_TEMPLATE = '''
                 'terabyte': '⚫',
                 'mercadolivre': '🟡',
                 'Mercadolivre': '🟡',
+                'magalu': '🔵',
+                'amazon': '🟠',
                 'melhores': '⭐'
             };
             return icons[store] || '🏪';
@@ -3253,7 +3326,7 @@ HTML_TEMPLATE = '''
             document.getElementById('edit-watch-valor-min').value = item.valor_minimo > 0 ? item.valor_minimo : '';
             document.getElementById('edit-watch-valor-max').value = item.valor_maximo != null ? item.valor_maximo : '';
             const lojas = item.lojas || {};
-            ['kabum','pichau','terabyte','mercadolivre'].forEach(s => {
+            ['kabum','pichau','terabyte','mercadolivre','magalu','amazon'].forEach(s => {
                 const cb = document.getElementById(`edit-wl-${s}`);
                 if (cb) cb.checked = lojas[s] !== false;
             });
@@ -3272,7 +3345,7 @@ HTML_TEMPLATE = '''
             const valorMin = document.getElementById('edit-watch-valor-min').value;
             const valorMax = document.getElementById('edit-watch-valor-max').value;
             const lojas = {};
-            ['kabum','pichau','terabyte','mercadolivre'].forEach(s => {
+            ['kabum','pichau','terabyte','mercadolivre','magalu','amazon'].forEach(s => {
                 lojas[s] = document.getElementById(`edit-wl-${s}`).checked;
             });
             if (!Object.values(lojas).some(v => v)) { showNotification('Selecione pelo menos uma loja.', 'error'); return; }
@@ -3305,7 +3378,7 @@ HTML_TEMPLATE = '''
             const query = document.getElementById('watch-nome').value.trim();
             if (!query) { showNotification('Informe o nome do produto.', 'error'); return; }
             const lojas = {};
-            ['kabum','pichau','terabyte','mercadolivre'].forEach(s => {
+            ['kabum','pichau','terabyte','mercadolivre','magalu','amazon'].forEach(s => {
                 const cb = document.getElementById(`wl-${s}`);
                 lojas[s] = cb ? cb.checked : true;
             });
@@ -4157,6 +4230,156 @@ def buscar_mercadolivre(produto, valor_minimo, valor_maximo):
         return [], False
 
 
+def buscar_magalu(produto, valor_minimo, valor_maximo):
+    """Busca via __NEXT_DATA__ JSON (igual KaBuM) — 1 request, dados estruturados."""
+    ofertas = []
+    try:
+        slug = urllib.parse.quote_plus(produto.strip())
+        url = f'https://www.magazineluiza.com.br/busca/{slug}/'
+        html = http_get(url, referer='https://www.magazineluiza.com.br/')
+
+        m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+        if not m:
+            return [], False
+        payload = json.loads(m.group(1))
+        products = (
+            payload.get('props', {})
+            .get('pageProps', {})
+            .get('data', {})
+            .get('search', {})
+            .get('products', [])
+        )
+        if not products:
+            return [], False
+        encontrou = len(products) > 0
+
+        for p in products:
+            if not p.get('available'):
+                continue
+            nome = (p.get('title') or '').strip()
+            if not nome:
+                continue
+            if not nome_compativel_com_busca(nome, produto):
+                continue
+
+            price_data = p.get('price') or {}
+            preco_str = price_data.get('bestPrice') or price_data.get('fullPrice')
+            if not preco_str:
+                continue
+            try:
+                preco_valor = float(preco_str)
+            except (TypeError, ValueError):
+                continue
+            if preco_valor <= 0:
+                continue
+
+            if not (valor_minimo <= preco_valor <= valor_maximo):
+                continue
+
+            path = p.get('path') or ''
+            link = f'https://www.magazineluiza.com.br{path}' if path.startswith('/') else ''
+
+            img_url = p.get('image') or ''
+            imagem = img_url.replace('{w}x{h}', '400x400') if '{w}' in img_url else img_url
+
+            parcelamento = None
+            inst = p.get('installment') or {}
+            qty = inst.get('quantity')
+            amt = inst.get('amount')
+            if qty and amt:
+                try:
+                    n_parc = int(qty)
+                    val_parc = float(amt)
+                    if n_parc >= 2 and val_parc > 0:
+                        sem_juros = 'sem juros' in (inst.get('paymentMethodDescription') or '').lower()
+                        parcelamento = {'parcelas': n_parc, 'valor': val_parc, 'sem_juros': sem_juros}
+                except (TypeError, ValueError):
+                    pass
+
+            ofertas.append({'nome': nome, 'preco': preco_valor, 'link': link, 'imagem': imagem, 'parcelamento': parcelamento})
+
+        ofertas.sort(key=lambda x: x['preco'])
+    except Exception as e:
+        print(f'Erro Magalu: {e}')
+        return [], False
+    return ofertas, encontrou
+
+
+def buscar_amazon(produto, valor_minimo, valor_maximo):
+    """Busca via HTML parsing (cloudscraper) — 1 request."""
+    ofertas = []
+    encontrou_produtos = False
+    try:
+        q = urllib.parse.quote_plus(produto.strip())
+        url = f'https://www.amazon.com.br/s?k={q}'
+
+        scraper = _nova_sessao_scraper()
+        html = _scraper_get(scraper, url, 'https://www.amazon.com.br/')
+        if not html:
+            return [], False
+
+        cards = re.split(r'(?=data-component-type="s-search-result")', html)
+        encontrou_produtos = len(cards) > 1
+
+        for card in cards[1:]:
+            # Precisa ter link direto /dp/ (não patrocinados com /sspa/)
+            link_m = re.search(r'href="(/[^"]*?/dp/([A-Z0-9]{10})[^"]*)"', card)
+            if not link_m:
+                continue
+            asin = link_m.group(2)
+            link = f'https://www.amazon.com.br/dp/{asin}'
+
+            # Nome
+            h2 = re.search(r'<h2[^>]*>.*?<span[^>]*>([^<]+)</span>', card, re.DOTALL)
+            if not h2:
+                continue
+            nome = unescape(re.sub(r'\s+', ' ', h2.group(1).strip()))
+
+            if not nome_compativel_com_busca(nome, produto):
+                continue
+
+            # Preço principal (a-price com data-a-size="xl" = preço destaque)
+            price_m = re.search(
+                r'<span class="a-price"[^>]*data-a-size="xl"[^>]*>.*?R\$[\s\xa0]*([\d.,]+)',
+                card, re.DOTALL,
+            )
+            if not price_m:
+                # Fallback: qualquer a-price
+                price_m = re.search(r'<span class="a-price"[^>]*>.*?R\$[\s\xa0]*([\d.,]+)', card, re.DOTALL)
+            if not price_m:
+                continue
+            preco_valor = formatar_preco(price_m.group(1))
+            if preco_valor is None:
+                continue
+
+            if not (valor_minimo <= preco_valor <= valor_maximo):
+                continue
+
+            # Imagem
+            img_m = re.search(r'<img[^>]+class="s-image"[^>]+src="([^"]+)"', card)
+            imagem = img_m.group(1) if img_m else None
+
+            # Parcelamento: "em até 12x de R$ X" (tags intercaladas, precisa strip)
+            parcelamento = None
+            inst_area = re.search(r'(em\s+at.{1,3}\s+\d+x\s+de\s+.*?(?:sem juros|</div>))', card, re.IGNORECASE | re.DOTALL)
+            if inst_area:
+                txt = re.sub(r'<[^>]+>', ' ', inst_area.group(1))
+                txt = re.sub(r'\s+', ' ', txt)
+                inst_m = re.search(r'(\d+)x\s+de\s+R\$[\s\xa0]*([\d.,]+)', txt)
+                if inst_m:
+                    n_parc = int(inst_m.group(1))
+                    val_parc = formatar_preco(inst_m.group(2))
+                    if val_parc and n_parc >= 2:
+                        sem_juros = bool(re.search(r'sem\s+juros', txt, re.IGNORECASE))
+                        parcelamento = {'parcelas': n_parc, 'valor': val_parc, 'sem_juros': sem_juros}
+
+            ofertas.append({'nome': nome, 'preco': preco_valor, 'link': link, 'imagem': imagem, 'parcelamento': parcelamento})
+
+        ofertas.sort(key=lambda x: x['preco'])
+    except Exception as e:
+        print(f'Erro Amazon: {e}')
+        return [], False
+    return ofertas, encontrou_produtos
 
 
 @app.route('/')
@@ -4164,7 +4387,7 @@ def home():
     return render_template_string(HTML_TEMPLATE)
 
 def _resposta_busca_vazia(mensagem=None):
-    out = {'kabum': [], 'pichau': [], 'terabyte': [], 'mercadolivre': [], 'melhores_ofertas': []}
+    out = {'kabum': [], 'pichau': [], 'terabyte': [], 'mercadolivre': [], 'magalu': [], 'amazon': [], 'melhores_ofertas': []}
     if mensagem:
         out['erro'] = mensagem
     return jsonify(out)
@@ -4189,16 +4412,18 @@ def buscar_todas():
         valor_maximo = float('inf')
     else:
         valor_maximo = float(valor_maximo)
-    filtros = dados.get('filtros', {'kabum': True, 'pichau': True, 'terabyte': True, 'mercadolivre': True})
+    filtros = dados.get('filtros', {'kabum': True, 'pichau': True, 'terabyte': True, 'mercadolivre': True, 'magalu': True, 'amazon': True})
 
     result = {}
     todas_ofertas = []
-    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre']
+    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon']
     buscadores = {
         'kabum': buscar_kabum,
         'pichau': buscar_pichau,
         'terabyte': buscar_terabyte,
         'mercadolivre': buscar_mercadolivre,
+        'magalu': buscar_magalu,
+        'amazon': buscar_amazon,
     }
 
     def verificar_site(resultados, nome_site, encontrou_produtos):
@@ -4273,9 +4498,9 @@ def buscar_stream():
     try:
         filtros = json.loads(request.args.get('filtros', '{}'))
     except Exception:
-        filtros = {s: True for s in ['kabum', 'pichau', 'terabyte', 'mercadolivre']}
+        filtros = {s: True for s in ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon']}
 
-    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre']
+    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon']
     lojas_ativas = [s for s in todas_lojas if filtros.get(s)]
 
     if not lojas_ativas:
@@ -4286,6 +4511,8 @@ def buscar_stream():
         'pichau': buscar_pichau,
         'terabyte': buscar_terabyte,
         'mercadolivre': buscar_mercadolivre,
+        'magalu': buscar_magalu,
+        'amazon': buscar_amazon,
     }
 
     def _verificar(resultados, nome_site, encontrou):
@@ -4396,7 +4623,7 @@ def wl_add():
         'id': uuid.uuid4().hex[:8],
         'query': query,
         'link': link or None,
-        'lojas': dados.get('lojas', {'kabum': True, 'pichau': True, 'terabyte': True, 'mercadolivre': True}),
+        'lojas': dados.get('lojas', {'kabum': True, 'pichau': True, 'terabyte': True, 'mercadolivre': True, 'magalu': True, 'amazon': True}),
         'valor_minimo': dados.get('valor_minimo', 0),
         'valor_maximo': dados.get('valor_maximo', None),
         'adicionado_em': datetime.now(timezone.utc).isoformat(),
@@ -4481,6 +4708,7 @@ def wl_update_one(item_id):
         buscadores = {
             'kabum': buscar_kabum, 'pichau': buscar_pichau,
             'terabyte': buscar_terabyte, 'mercadolivre': buscar_mercadolivre,
+            'magalu': buscar_magalu, 'amazon': buscar_amazon,
         }
         lojas = [s for s, v in (item.get('lojas') or {}).items() if v and s in buscadores]
         vm = float(item.get('valor_minimo') or 0)
