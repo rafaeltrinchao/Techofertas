@@ -741,25 +741,47 @@ HTML_TEMPLATE = '''
         }
 
         .store-icon {
-            font-size: 1.5rem;
             width: 2.5rem;
             height: 2.5rem;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: var(--radius-lg);
-            color: white;
-            font-weight: bold;
+            border-radius: 10px;
+            background: #ffffff;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.10), 0 0 0 1px rgba(0,0,0,0.07);
+            flex-shrink: 0;
+            overflow: hidden;
+            padding: 5px;
         }
 
-        .store-icon.kabum { background: #ff6b35; }
-        .store-icon.pichau { background: #dc2626; }
-        .store-icon.terabyte { background: #334155; }
-        .store-icon.mercadolivre { background: #f3a00e; }
-        .store-icon.magalu { background: #0086ff; }
-        .store-icon.amazon { background: #ff9900; }
-        .store-icon.melhores { background: var(--accent-color); }
-        [data-theme="dark"] .store-icon.terabyte { background: #475569; }
+        [data-theme="dark"] .store-icon {
+            background: #ffffff;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.08);
+        }
+
+        .store-logo-img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+
+        .store-icon.melhores {
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            box-shadow: 0 1px 4px rgba(245,158,11,0.45);
+            font-size: 1.1rem;
+        }
+
+        .store-label-logo {
+            width: 18px;
+            height: 18px;
+            object-fit: contain;
+            vertical-align: middle;
+            border-radius: 4px;
+            background: white;
+            padding: 1px;
+            flex-shrink: 0;
+        }
 
         .store-details h3 {
             font-size: 1.25rem;
@@ -1788,27 +1810,27 @@ HTML_TEMPLATE = '''
                         <div class="stores-grid">
                             <div class="store-option">
                                 <input type="checkbox" id="kabum" class="store-checkbox" value="kabum" checked>
-                                <label for="kabum" class="store-label">🟠 KaBuM!</label>
+                                <label for="kabum" class="store-label"><img src="https://www.google.com/s2/favicons?domain=kabum.com.br&sz=32" class="store-label-logo" alt=""> KaBuM!</label>
                             </div>
                             <div class="store-option">
                                 <input type="checkbox" id="pichau" class="store-checkbox" value="pichau" checked>
-                                <label for="pichau" class="store-label">🔴 Pichau</label>
+                                <label for="pichau" class="store-label"><img src="https://www.google.com/s2/favicons?domain=pichau.com.br&sz=32" class="store-label-logo" alt=""> Pichau</label>
                             </div>
                             <div class="store-option">
                                 <input type="checkbox" id="terabyte" class="store-checkbox" value="terabyte" checked>
-                                <label for="terabyte" class="store-label">⚫ Terabyte</label>
+                                <label for="terabyte" class="store-label"><img src="https://www.google.com/s2/favicons?domain=terabyteshop.com.br&sz=32" class="store-label-logo" alt=""> Terabyte</label>
                             </div>
                             <div class="store-option">
                                 <input type="checkbox" id="mercadolivre" class="store-checkbox" value="mercadolivre" checked>
-                                <label for="mercadolivre" class="store-label">🟡 Mercado Livre</label>
+                                <label for="mercadolivre" class="store-label"><img src="https://www.google.com/s2/favicons?domain=mercadolivre.com.br&sz=32" class="store-label-logo" alt=""> Mercado Livre</label>
                             </div>
                             <div class="store-option">
                                 <input type="checkbox" id="magalu" class="store-checkbox" value="magalu" checked>
-                                <label for="magalu" class="store-label">🔵 Magalu</label>
+                                <label for="magalu" class="store-label"><img src="https://www.google.com/s2/favicons?domain=magazineluiza.com.br&sz=32" class="store-label-logo" alt=""> Magalu</label>
                             </div>
                             <div class="store-option">
                                 <input type="checkbox" id="amazon" class="store-checkbox" value="amazon" checked>
-                                <label for="amazon" class="store-label">🟠 Amazon</label>
+                                <label for="amazon" class="store-label"><img src="https://www.google.com/s2/favicons?domain=amazon.com.br&sz=32" class="store-label-logo" alt=""> Amazon</label>
                             </div>
                         </div>
                     </div>
@@ -1896,12 +1918,12 @@ HTML_TEMPLATE = '''
             <div class="modal-stores" style="margin-top:1rem">
                 <label class="form-label" style="display:block;margin-bottom:0.5rem">Lojas</label>
                 <div class="stores-grid">
-                    <div class="store-option"><input type="checkbox" id="wl-kabum" class="store-checkbox wl-store-checkbox" value="kabum" checked><label for="wl-kabum" class="store-label">🟠 KaBuM!</label></div>
-                    <div class="store-option"><input type="checkbox" id="wl-pichau" class="store-checkbox wl-store-checkbox" value="pichau" checked><label for="wl-pichau" class="store-label">🔴 Pichau</label></div>
-                    <div class="store-option"><input type="checkbox" id="wl-terabyte" class="store-checkbox wl-store-checkbox" value="terabyte" checked><label for="wl-terabyte" class="store-label">⚫ Terabyte</label></div>
-                    <div class="store-option"><input type="checkbox" id="wl-mercadolivre" class="store-checkbox wl-store-checkbox" value="mercadolivre" checked><label for="wl-mercadolivre" class="store-label">🟡 Mercado Livre</label></div>
-                    <div class="store-option"><input type="checkbox" id="wl-magalu" class="store-checkbox wl-store-checkbox" value="magalu" checked><label for="wl-magalu" class="store-label">🔵 Magalu</label></div>
-                    <div class="store-option"><input type="checkbox" id="wl-amazon" class="store-checkbox wl-store-checkbox" value="amazon" checked><label for="wl-amazon" class="store-label">🟠 Amazon</label></div>
+                    <div class="store-option"><input type="checkbox" id="wl-kabum" class="store-checkbox wl-store-checkbox" value="kabum" checked><label for="wl-kabum" class="store-label"><img src="https://www.google.com/s2/favicons?domain=kabum.com.br&sz=32" class="store-label-logo" alt=""> KaBuM!</label></div>
+                    <div class="store-option"><input type="checkbox" id="wl-pichau" class="store-checkbox wl-store-checkbox" value="pichau" checked><label for="wl-pichau" class="store-label"><img src="https://www.google.com/s2/favicons?domain=pichau.com.br&sz=32" class="store-label-logo" alt=""> Pichau</label></div>
+                    <div class="store-option"><input type="checkbox" id="wl-terabyte" class="store-checkbox wl-store-checkbox" value="terabyte" checked><label for="wl-terabyte" class="store-label"><img src="https://www.google.com/s2/favicons?domain=terabyteshop.com.br&sz=32" class="store-label-logo" alt=""> Terabyte</label></div>
+                    <div class="store-option"><input type="checkbox" id="wl-mercadolivre" class="store-checkbox wl-store-checkbox" value="mercadolivre" checked><label for="wl-mercadolivre" class="store-label"><img src="https://www.google.com/s2/favicons?domain=mercadolivre.com.br&sz=32" class="store-label-logo" alt=""> Mercado Livre</label></div>
+                    <div class="store-option"><input type="checkbox" id="wl-magalu" class="store-checkbox wl-store-checkbox" value="magalu" checked><label for="wl-magalu" class="store-label"><img src="https://www.google.com/s2/favicons?domain=magazineluiza.com.br&sz=32" class="store-label-logo" alt=""> Magalu</label></div>
+                    <div class="store-option"><input type="checkbox" id="wl-amazon" class="store-checkbox wl-store-checkbox" value="amazon" checked><label for="wl-amazon" class="store-label"><img src="https://www.google.com/s2/favicons?domain=amazon.com.br&sz=32" class="store-label-logo" alt=""> Amazon</label></div>
                 </div>
             </div>
             <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
@@ -1931,12 +1953,12 @@ HTML_TEMPLATE = '''
             <div class="modal-stores" style="margin-top:1rem">
                 <label class="form-label" style="display:block;margin-bottom:0.5rem">Lojas</label>
                 <div class="stores-grid">
-                    <div class="store-option"><input type="checkbox" id="edit-wl-kabum" class="store-checkbox" value="kabum"><label for="edit-wl-kabum" class="store-label">🟠 KaBuM!</label></div>
-                    <div class="store-option"><input type="checkbox" id="edit-wl-pichau" class="store-checkbox" value="pichau"><label for="edit-wl-pichau" class="store-label">🔴 Pichau</label></div>
-                    <div class="store-option"><input type="checkbox" id="edit-wl-terabyte" class="store-checkbox" value="terabyte"><label for="edit-wl-terabyte" class="store-label">⚫ Terabyte</label></div>
-                    <div class="store-option"><input type="checkbox" id="edit-wl-mercadolivre" class="store-checkbox" value="mercadolivre"><label for="edit-wl-mercadolivre" class="store-label">🟡 Mercado Livre</label></div>
-                    <div class="store-option"><input type="checkbox" id="edit-wl-magalu" class="store-checkbox" value="magalu"><label for="edit-wl-magalu" class="store-label">🔵 Magalu</label></div>
-                    <div class="store-option"><input type="checkbox" id="edit-wl-amazon" class="store-checkbox" value="amazon"><label for="edit-wl-amazon" class="store-label">🟠 Amazon</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-kabum" class="store-checkbox" value="kabum"><label for="edit-wl-kabum" class="store-label"><img src="https://www.google.com/s2/favicons?domain=kabum.com.br&sz=32" class="store-label-logo" alt=""> KaBuM!</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-pichau" class="store-checkbox" value="pichau"><label for="edit-wl-pichau" class="store-label"><img src="https://www.google.com/s2/favicons?domain=pichau.com.br&sz=32" class="store-label-logo" alt=""> Pichau</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-terabyte" class="store-checkbox" value="terabyte"><label for="edit-wl-terabyte" class="store-label"><img src="https://www.google.com/s2/favicons?domain=terabyteshop.com.br&sz=32" class="store-label-logo" alt=""> Terabyte</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-mercadolivre" class="store-checkbox" value="mercadolivre"><label for="edit-wl-mercadolivre" class="store-label"><img src="https://www.google.com/s2/favicons?domain=mercadolivre.com.br&sz=32" class="store-label-logo" alt=""> Mercado Livre</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-magalu" class="store-checkbox" value="magalu"><label for="edit-wl-magalu" class="store-label"><img src="https://www.google.com/s2/favicons?domain=magazineluiza.com.br&sz=32" class="store-label-logo" alt=""> Magalu</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-amazon" class="store-checkbox" value="amazon"><label for="edit-wl-amazon" class="store-label"><img src="https://www.google.com/s2/favicons?domain=amazon.com.br&sz=32" class="store-label-logo" alt=""> Amazon</label></div>
                 </div>
             </div>
             <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
@@ -2281,7 +2303,7 @@ HTML_TEMPLATE = '''
                     _lastSearchResults[data.store] = data.ofertas; // acumula para persistência
                     // Substitui skeleton pelo card real
                     const skeletonCard = document.getElementById(`store-${data.store}`);
-                    const titulo = `${getStoreIcon(data.store)} ${getStoreDisplayName(data.store)}`;
+                    const titulo = getStoreDisplayName(data.store);
                     if (skeletonCard) {
                         skeletonCard.outerHTML = createStoreSection(data.store, titulo, data.ofertas, data.store);
                         const content = document.getElementById(`content-${data.store}`);
@@ -2388,9 +2410,9 @@ HTML_TEMPLATE = '''
                 <div class="store-card skeleton-card" id="store-${store}">
                     <div class="store-header" style="cursor:default">
                         <div class="store-info">
-                            <div class="store-icon ${store}">${getStoreIcon(store)}</div>
+                            <div class="store-icon ${store}">${getStoreLogo(store)}</div>
                             <div class="store-details">
-                                <h3>${getStoreIcon(store)} ${getStoreDisplayName(store)}</h3>
+                                <h3>${getStoreDisplayName(store)}</h3>
                                 <p class="store-count">Buscando...</p>
                             </div>
                         </div>
@@ -2419,7 +2441,7 @@ HTML_TEMPLATE = '''
                  // CORREÇÃO PROBLEMA 1: Não somar produtos das Melhores Ofertas ao total
                  // totalProducts += bestOffers.length; // LINHA REMOVIDA
                  
-                 resultsHTML += createStoreSection('melhores', '⭐ Melhores Ofertas', bestOffers, 'melhores');
+                 resultsHTML += createStoreSection('melhores', 'Melhores Ofertas', bestOffers, 'melhores');
              }
 
              // Add individual store sections (ordem fixa para consistência)
@@ -2432,9 +2454,7 @@ HTML_TEMPLATE = '''
                  totalProducts += validProducts.length;
 
                  const storeName = getStoreDisplayName(store);
-                 const storeIcon = getStoreIcon(store);
-                 
-                 resultsHTML += createStoreSection(store, `${storeIcon} ${storeName}`, storeData, store);
+                 resultsHTML += createStoreSection(store, storeName, storeData, store);
              });
 
              // Update results
@@ -2481,7 +2501,7 @@ HTML_TEMPLATE = '''
                 <div class="store-card" id="store-${storeId}">
                     <div class="store-header" onclick="toggleStore('${storeId}')">
                         <div class="store-info">
-                            <div class="store-icon ${storeType}">${getStoreIcon(storeType)}</div>
+                            <div class="store-icon ${storeType}">${getStoreLogo(storeType)}</div>
                             <div class="store-details">
                                 <h3>${title}</h3>
                                 <p class="store-count">${isMelhores ? '' : validProducts.length + ' produto' + (validProducts.length !== 1 ? 's' : '')}</p>
@@ -2644,18 +2664,21 @@ HTML_TEMPLATE = '''
             return names[store] || store;
         }
 
-        function getStoreIcon(store) {
-            const icons = {
-                'kabum': '🟠',
-                'pichau': '🔴',
-                'terabyte': '⚫',
-                'mercadolivre': '🟡',
-                'Mercadolivre': '🟡',
-                'magalu': '🔵',
-                'amazon': '🟠',
-                'melhores': '⭐'
+        function getStoreIcon(store) { return ''; }
+
+        function getStoreLogo(store) {
+            const domains = {
+                'kabum': 'kabum.com.br',
+                'pichau': 'pichau.com.br',
+                'terabyte': 'terabyteshop.com.br',
+                'mercadolivre': 'mercadolivre.com.br',
+                'Mercadolivre': 'mercadolivre.com.br',
+                'magalu': 'magazineluiza.com.br',
+                'amazon': 'amazon.com.br',
             };
-            return icons[store] || '🏪';
+            const domain = domains[store];
+            if (!domain) return '<span style="line-height:1">⭐</span>';
+            return `<img src="https://www.google.com/s2/favicons?domain=${domain}&sz=64" class="store-logo-img" alt="${store}">`;
         }
 
         function resetSearch() {
@@ -3108,7 +3131,7 @@ HTML_TEMPLATE = '''
                 if (data.type === 'store') {
                     const skCard = document.getElementById(`store-${data.store}`);
                     if (skCard) {
-                        skCard.outerHTML = createStoreSection(data.store, `${getStoreIcon(data.store)} ${getStoreDisplayName(data.store)}`, data.ofertas, data.store);
+                        skCard.outerHTML = createStoreSection(data.store, getStoreDisplayName(data.store), data.ofertas, data.store);
                         const c = document.getElementById(`content-${data.store}`);
                         if (c) c.classList.add('expanded');
                     }
