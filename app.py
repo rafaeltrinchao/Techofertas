@@ -4484,18 +4484,34 @@ def buscar_shopee(produto, valor_minimo, valor_maximo):
 
     ofertas = []
     try:
-        url = f'https://shopee.com.br/search?keyword={urllib.parse.quote(produto.strip())}&page=0&sortBy=pop'
-        html_busca = _bot_get(url)
-        if not html_busca:
-            return [], False
+        kw = urllib.parse.quote(produto.strip())
+        sorts = ['pop', 'price', 'newest', 'sales']
+        urls_busca = [f'https://shopee.com.br/search?keyword={kw}&page=0&sortBy={s}' for s in sorts]
 
-        produtos = _parse_busca(html_busca)
+        from concurrent.futures import as_completed as _as_completed
+
+        # Busca 4 sorts em paralelo para maximizar produtos únicos
+        vistos = set()
+        produtos = []
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            futuros = {ex.submit(_bot_get, u): u for u in urls_busca}
+            for fut in _as_completed(futuros):
+                try:
+                    html_busca = fut.result()
+                    for p in _parse_busca(html_busca):
+                        link = p['link']
+                        if link and link not in vistos:
+                            vistos.add(link)
+                            produtos.append(p)
+                except Exception:
+                    pass
+
         if not produtos:
             return [], False
 
-        from concurrent.futures import as_completed as _as_completed
+        # Busca preço de cada produto em paralelo
         com_preco = []
-        with ThreadPoolExecutor(max_workers=8) as ex:
+        with ThreadPoolExecutor(max_workers=10) as ex:
             futuros = {ex.submit(_get_preco, p): p for p in produtos}
             for fut in _as_completed(futuros):
                 try:
