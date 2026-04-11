@@ -9,7 +9,7 @@ Integração com TechOfertas:
       produtos sem relação alguma; is_produto_principal filtra acessórios relacionados)
 
 Uso:
-    from filtro_produto_principal import is_produto_principal
+    from filtro_produto_principal import is_produto_principal, is_produto_novo
     if not is_produto_principal(nome, produto):
         continue
 
@@ -440,6 +440,81 @@ def is_produto_principal(titulo: str, query: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Constante e função para filtro de produtos NOVOS vs. USADOS
+# ---------------------------------------------------------------------------
+
+# Palavras que, na QUERY, indicam que o usuário QUER produtos usados/recondicionados.
+# Quando presentes, is_produto_novo() retorna True (não filtra nada).
+QUERY_QUER_USADO = {
+    "usado", "usada", "usados",
+    "recondicionado", "recondicionada",
+    "seminovo", "semi-novo", "remanufaturado",
+    "vitrine", "refurbished",
+}
+
+_QUERY_QUER_USADO_NORM = {_normalizar(p) for p in QUERY_QUER_USADO}
+
+
+def is_produto_novo(titulo: str, query: str) -> bool:
+    """
+    Retorna True se o produto parece ser NOVO (não usado/recondicionado).
+    Retorna False se o título indica produto usado, recondicionado ou seminovo.
+
+    Exceção: se a query explicitamente pede produto usado/recondicionado,
+    retorna True (não filtra — usuário sabe o que quer).
+
+    Sinais de produto USADO/RECONDICIONADO detectados:
+        1. Título começa com "Usado:" (padrão Mercado Livre)
+        2. Palavras explícitas: recondicionado, seminovo, vitrine, etc.
+        3. "Muito Bom" como frase (condição ML para item usado)
+        4. " - Bom" / " - Excelente" com traço no título original
+           (padrão ML: "iPhone 14 128GB - Excelente", "iPhone 14 - Bom (Recondicionado)")
+        5. "Bom" ou "Excelente" como último token (sem traço)
+           (padrão ML alternativo: "Apple iPhone 14 128GB Excelente")
+    """
+    if not titulo or not query:
+        return True
+
+    titulo_norm = _normalizar(titulo)
+    query_norm = _normalizar(query)
+
+    # Usuário quer produto usado/recondicionado → não filtrar
+    if any(t in _QUERY_QUER_USADO_NORM for t in query_norm.split()):
+        return True
+
+    # 1. Prefixo "Usado:" ou "Usado -" (ML marca itens usados assim)
+    if re.search(r'^usado\b', titulo_norm):
+        return False
+
+    # 2. Palavras explícitas de condição usada/recondicionada
+    if re.search(
+        r'\b(?:recondicionad[ao]s?|seminov[ao]s?|semi[\s-]nov[ao]s?'
+        r'|vitrine|remanufaturad[ao]s?|refurbished)\b',
+        titulo_norm,
+    ):
+        return False
+
+    # 3. "Muito Bom" como frase — condição ML para item usado, grau "Muito Bom"
+    # (distinto de "muito boa câmera", que usa gênero feminino)
+    if re.search(r'\bmuito\s+bom\b', titulo_norm):
+        return False
+
+    # 4. " - Bom" / " - Excelente" com traço no título ORIGINAL
+    # Padrão ML: "Apple iPhone 14 128GB - Bom" / "iPhone 14 - Excelente (Recond.)"
+    # Usa `titulo` original (não normalizado) pois o normalizador remove traços.
+    if re.search(r'\s-\s(?:Bom|Excelente)\b', titulo, re.IGNORECASE):
+        return False
+
+    # 5. "bom" ou "excelente" como ÚLTIMO token — sem traço (padrão alternativo ML)
+    # "Apple iPhone 14 128GB Excelente" → claramente item usado sem "Usado:" prefix
+    tokens_titulo = titulo_norm.split()
+    if tokens_titulo and tokens_titulo[-1] in {'bom', 'excelente'}:
+        return False
+
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Suite de testes
 # ---------------------------------------------------------------------------
 
@@ -688,6 +763,87 @@ def _imprimir_relatorio(r: dict):
     print(sep)
 
 
+SUITE_NOVO = [
+    # Produtos NOVOS — devem passar (True)
+    ("iPhone 14", "Apple iPhone 14 128GB Preto A2882 Lacrado NF-e", True),
+    ("iPhone 14", "Apple iPhone 14 Pro 256GB Titanio Natural Lacrado", True),
+    ("Galaxy S24", "Samsung Galaxy S24 128GB Preto Onyx 6.1 Lacrado", True),
+    ("MacBook", "Apple MacBook Air M2 13 256GB 8GB Midnight MGN63BZ/A", True),
+    ("notebook", "Dell Inspiron 15 Intel i5 16GB 512GB SSD Win11 Lacrado", True),
+    # Produtos NOVOS com "excelente" no meio (não no fim) — não deve filtrar
+    ("iPhone 14", "Apple iPhone 14 com Câmera Excelente 12MP Lacrado", True),
+    ("monitor", "Monitor Dell 27 QHD IPS 144Hz Qualidade Excelente para Design", True),
+    # Usuário quer usado → não filtrar
+    ("iPhone 14 usado", "Apple iPhone 14 128GB - Bom (Recondicionado)", True),
+    ("iPhone recondicionado", "Usado: Apple iPhone 14 128GB Muito Bom Trocafácil", True),
+
+    # Produtos USADOS — devem ser filtrados (False)
+    # Padrão 1: começa com "Usado:"
+    ("iPhone 14", "Usado: Apple iPhone 14 128GB Bom", False),
+    ("iPhone 14", "Usado: Apple iPhone 14 Jobs 512 Gb Amarelo - Excelente (Recondicionado)", False),
+    ("iPhone 14", "Usado: Apple iPhone 14 128GB Muito Bom - Trocafácil", False),
+    ("iPhone 14", "Usado: Apple iPhone 14 128GB - Excelente", False),
+    # Padrão 2: "recondicionado" explícito
+    ("iPhone 14", "Apple iPhone 14 512gb Meia-noite - Bom (Recondicionado)", False),
+    ("iPhone 14", "Apple iPhone 14 Muito Bom - Sem (Recondicionado)", False),
+    ("Galaxy S24", "Samsung Galaxy S24 128GB Recondicionado Grade A", False),
+    ("notebook", "Dell Inspiron 15 Seminovo Excelente Estado Pouco Uso", False),
+    # Padrão 3: "Muito Bom" como frase
+    ("iPhone 14", "Apple iPhone 14 128GB Preto - Muito Bom - Bateria Premium 100%", False),
+    ("iPhone 14", "Apple iPhone 14 128GB Preto Muito Bom Brindes Inclusos", False),
+    # Padrão 4: " - Bom" / " - Excelente" com traço
+    ("iPhone 14", "Apple iPhone 14 512 gb - Prata - Bom", False),
+    ("iPhone 14", "Apple iPhone 14 128GB - Excelente", False),
+    ("iPhone 14", "Apple iPhone 14 Pro 256GB - Excelente (Recondicionado)", False),
+    # Padrão 5: último token = condição
+    ("iPhone 14", "Apple iPhone 14 128GB Excelente", False),
+    ("Galaxy S24", "Samsung Galaxy S24 Ultra 512GB Bom", False),
+]
+
+
+def _executar_suite_novo() -> dict:
+    total = len(SUITE_NOVO)
+    acertos = 0
+    falsos_positivos = []
+    falsos_negativos = []
+
+    for query, titulo, esperado in SUITE_NOVO:
+        resultado = is_produto_novo(titulo, query)
+        if resultado == esperado:
+            acertos += 1
+        elif resultado is True and esperado is False:
+            falsos_negativos.append((query, titulo))
+        else:
+            falsos_positivos.append((query, titulo))
+
+    return {
+        "total": total,
+        "acertos": acertos,
+        "acuracia": acertos / total * 100,
+        "falsos_positivos": falsos_positivos,
+        "falsos_negativos": falsos_negativos,
+    }
+
+
 if __name__ == "__main__":
     r = _executar_suite()
     _imprimir_relatorio(r)
+
+    r2 = _executar_suite_novo()
+    print("\n" + "=" * 65)
+    print("  RELATORIO DE TESTES --- is_produto_novo")
+    print("=" * 65)
+    print(f"  Total: {r2['total']}  Acertos: {r2['acertos']}  Acuracia: {r2['acuracia']:.1f}%")
+    if r2['falsos_positivos']:
+        print(f"\n  FALSOS POSITIVOS ({len(r2['falsos_positivos'])}) -- usado/recond. NAO filtrado:")
+        for q, t in r2['falsos_positivos']:
+            print(f"    query={q!r}  titulo={t!r}")
+    else:
+        print("\n  Nenhum falso positivo.")
+    if r2['falsos_negativos']:
+        print(f"\n  FALSOS NEGATIVOS ({len(r2['falsos_negativos'])}) -- produto novo REMOVIDO:")
+        for q, t in r2['falsos_negativos']:
+            print(f"    query={q!r}  titulo={t!r}")
+    else:
+        print("\n  Nenhum falso negativo.")
+    print("=" * 65)
