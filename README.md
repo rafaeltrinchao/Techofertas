@@ -1,6 +1,6 @@
 # TechOfertas
 
-Comparador de preços para produtos de tecnologia nas principais lojas brasileiras: **KaBuM!**, **Pichau**, **Terabyte** e **Mercado Livre**.
+Comparador de preços para produtos de tecnologia nas principais lojas brasileiras: **KaBuM!**, **Pichau**, **Terabyte**, **Mercado Livre**, **Magazine Luiza**, **Amazon**, **Shopee** e **Casas Bahia**.
 
 Busca em tempo real com streaming de resultados, lista de acompanhamento com atualização automática, histórico de preços e suporte a dark mode.
 
@@ -8,11 +8,14 @@ Busca em tempo real com streaming de resultados, lista de acompanhamento com atu
 
 ## Funcionalidades
 
-- Busca simultânea em até 4 lojas com resultados em tempo real (SSE)
+- Busca simultânea em até 8 lojas com resultados em tempo real (SSE)
 - Filtro por valor mínimo e máximo
 - Melhores ofertas automáticas com ranking de preços
 - **Aba Acompanhar**: monitora produtos salvos e atualiza preços automaticamente a cada 15 minutos
+- Acompanhamento por link direto do produto ou por nome/query
 - Histórico de preços com indicador de tendência (subiu / caiu / estável)
+- Alertas de preço no navegador: notificação quando o preço cai ou atinge valor alvo
+- Notificações via Telegram (configurável por usuário, sem custo)
 - Dark mode com alternância por botão
 - Reordenação de produtos acompanhados por drag and drop
 - Interface responsiva para desktop e mobile
@@ -31,7 +34,7 @@ Busca em tempo real com streaming de resultados, lista de acompanhamento com atu
 ### 1. Clonar o repositório
 
 ```bash
-git clone https://github.com/seu-usuario/TechOfertas.git
+git clone https://github.com/rafaeltrinchao/Techofertas.git
 cd TechOfertas
 ```
 
@@ -75,10 +78,11 @@ python app.py --abrir
 
 ```
 TechOfertas/
-├── app.py              # Aplicação Flask completa (backend + frontend embutido)
-├── requirements.txt    # Dependências Python
-├── watchlist.json      # Dados persistidos da lista de acompanhamento (gerado automaticamente)
-└── logo2.png           # Logo do site
+├── app.py                  # Aplicação Flask completa (backend + frontend embutido)
+├── requirements.txt        # Dependências Python
+├── watchlist.json          # Lista de acompanhamento (gerado automaticamente)
+├── telegram_config.json    # Configuração do Telegram (gerado automaticamente ao configurar)
+└── logo2.png               # Logo do site
 ```
 
 ---
@@ -93,19 +97,22 @@ TechOfertas/
 
 ---
 
-## Executável (sem instalação)
+## Notificações via Telegram
 
-Se não quiser instalar Python e dependências, basta executar o arquivo `TechOfertas.exe` diretamente. Ele já inclui tudo o que é necessário para rodar.
+É possível receber alertas de queda de preço diretamente no Telegram, sem nenhum custo. Para configurar:
 
-Após abrir, o servidor sobe automaticamente e você pode acessar `http://127.0.0.1:5000` no navegador.
+1. Na aba **Acompanhar**, clique no botão **Telegram**
+2. Siga o guia passo a passo dentro do modal para criar seu bot no BotFather
+3. Cole o Token, clique em **Detectar** para preencher o Chat ID automaticamente
+4. Salve e clique em **Testar** para confirmar
 
-> O `watchlist.json` será criado na mesma pasta do executável.
+A configuração é individual — cada usuário cria o próprio bot e o `telegram_config.json` é gerado localmente.
 
 ---
 
 ## Observações
 
-- O arquivo `watchlist.json` é criado automaticamente na primeira vez que você adiciona um produto à lista de acompanhamento.
+- Os arquivos `watchlist.json` e `telegram_config.json` são criados automaticamente na primeira utilização e ficam na mesma pasta do `app.py`.
 - O scraping depende da estrutura atual dos sites das lojas. Se uma loja alterar seu layout, a busca pode retornar sem resultados para aquela loja específica.
 - O projeto foi desenvolvido para uso pessoal. Respeite os termos de uso de cada site.
 
