@@ -988,6 +988,7 @@ HTML_TEMPLATE = '''
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow-x: hidden;
         }
 
         /* Header */
@@ -1023,6 +1024,9 @@ HTML_TEMPLATE = '''
 
         .logo-icon {
             font-size: 2rem;
+        }
+        .logo-img {
+            height: 70px;
         }
 
         /* Main Content */
@@ -1288,6 +1292,8 @@ HTML_TEMPLATE = '''
             margin-bottom: 2rem;
             padding-bottom: 1rem;
             border-bottom: 2px solid var(--border);
+            flex-wrap: wrap;
+            gap: 0.75rem;
         }
 
         .results-title {
@@ -1568,6 +1574,7 @@ HTML_TEMPLATE = '''
              display: flex;
              gap: 0.5rem;
              margin-top: 0.25rem;
+             flex-wrap: wrap;
          }
 
         .btn-sm {
@@ -1846,22 +1853,317 @@ HTML_TEMPLATE = '''
                 bottom: 1rem;
                 right: 1rem;
             }
+
+            /* Image modal close button — keep inside bounds */
+            .modal-close {
+                top: -1rem;
+                right: -1rem;
+                width: 2.5rem;
+                height: 2.5rem;
+                font-size: 1.25rem;
+            }
+
+            /* Watchlist toolbar stacks on tablets */
+            .watchlist-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .watchlist-actions {
+                justify-content: flex-start;
+            }
+
+            /* Results header — wrap layout toggle and nova busca */
+            .results-header {
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+            .results-header > div:first-child {
+                flex: 1 1 100%;
+            }
+            .layout-toggle {
+                margin-left: 0;
+                margin-right: auto;
+            }
+
+            /* Store header — compact on tablets */
+            .store-details h3 {
+                font-size: 1.1rem;
+            }
+
+            /* Store results gap */
+            .store-results {
+                gap: 1rem;
+            }
         }
 
         @media (max-width: 480px) {
             .main-content {
-                padding: 1rem;
+                padding: 0.75rem;
             }
 
             .search-card {
                 padding: 1rem;
                 margin: 0.5rem;
+                border-radius: var(--radius-lg);
+            }
+
+            .search-title h1 {
+                font-size: 1.5rem;
+            }
+            .search-title p {
+                font-size: 0.95rem;
             }
 
             .store-header {
                 flex-direction: column;
-                gap: 1rem;
+                gap: 0.75rem;
                 text-align: center;
+            }
+
+            /* Logo smaller on phones */
+            .logo-img {
+                height: 55px;
+            }
+
+            /* Store labels — allow wrapping on small screens */
+            .store-label {
+                white-space: normal;
+                min-height: 2.75rem;
+                font-size: 0.78rem;
+                padding: 0.5rem 0.75rem;
+            }
+
+            /* Tabs — compact for phones */
+            .tab-bar-inner {
+                padding: 0 0.75rem;
+            }
+            .tab-btn {
+                padding: 0.65rem 0.75rem;
+                font-size: 0.82rem;
+                gap: 0.35rem;
+            }
+
+            /* Results page — stack everything vertically */
+            .results-header {
+                margin-bottom: 1.25rem;
+            }
+            .results-title {
+                font-size: 1.2rem;
+            }
+            .results-header > div:first-child {
+                flex: 1 1 100%;
+            }
+            .layout-toggle {
+                margin-left: 0;
+                margin-right: 0;
+                flex: 1 1 auto;
+            }
+            .layout-toggle-label {
+                display: none;
+            }
+            .layout-toggle button {
+                padding: 0.4rem 0.6rem;
+                font-size: 0.75rem;
+            }
+            .results-header > .btn {
+                flex: 0 0 auto;
+                font-size: 0.82rem;
+                padding: 0.5rem 0.875rem;
+            }
+            .search-query-term {
+                max-width: 200px;
+                font-size: 0.875rem;
+            }
+
+            /* Store card — compact on phones */
+            .store-card:hover {
+                transform: none;
+            }
+            .store-header {
+                padding: 1rem;
+            }
+            .store-icon {
+                width: 2rem;
+                height: 2rem;
+                border-radius: 8px;
+                padding: 3px;
+            }
+            .store-details h3 {
+                font-size: 1rem;
+            }
+            .store-count {
+                font-size: 0.78rem;
+            }
+            .store-results {
+                gap: 0.75rem;
+            }
+
+            /* Product cards — tighter on phones */
+            .products-grid {
+                padding: 0.625rem;
+                gap: 0.5rem;
+            }
+            .product-card {
+                padding: 0.75rem;
+                gap: 0.5rem;
+            }
+            .product-card:hover {
+                transform: none;
+            }
+            .product-name {
+                font-size: 0.85rem;
+            }
+            .product-price {
+                font-size: 1rem;
+            }
+            .product-installment {
+                font-size: 0.78rem;
+            }
+            .product-actions {
+                gap: 0.35rem;
+            }
+            .product-actions .btn-sm {
+                padding: 0.4rem 0.75rem;
+                font-size: 0.75rem;
+            }
+
+            /* Product image smaller on phones */
+            .product-image {
+                width: 50px;
+                height: 50px;
+            }
+
+            /* Form modal — full width on phones */
+            .form-modal-box {
+                max-width: calc(100vw - 1.5rem);
+                padding: 1.25rem;
+            }
+
+            /* Image modal close — inside bounds */
+            .modal-close {
+                top: 0.5rem;
+                right: 0.5rem;
+                width: 2.25rem;
+                height: 2.25rem;
+                font-size: 1.1rem;
+            }
+
+            /* Watchlist items — responsive layout */
+            .watch-item {
+                padding: 0.875rem 1rem;
+                gap: 0.625rem;
+                flex-wrap: wrap;
+            }
+            .watch-item-icon {
+                font-size: 1.25rem;
+            }
+            .watch-item-body {
+                min-width: 0;
+                flex: 1 1 calc(100% - 6rem);
+            }
+            .watch-item-price {
+                min-width: 0;
+                text-align: left;
+                flex: 1 1 auto;
+            }
+            .watch-item-actions {
+                margin-left: auto;
+            }
+
+            /* Watchlist title */
+            .watchlist-title {
+                font-size: 1.25rem;
+            }
+
+            /* Compact layout — tighter on phones */
+            .product-card.compact {
+                grid-template-columns: 28px 1fr auto;
+                gap: 0.25rem 0.4rem;
+                padding: 0.4rem;
+            }
+            .compact-installment {
+                font-size: 0.65rem;
+            }
+
+            /* Auto-update banner */
+            .auto-update-banner {
+                flex-wrap: wrap;
+                padding: 0.625rem 1rem;
+                font-size: 0.8rem;
+            }
+
+            /* Price toast — respect screen edges */
+            .price-toast-container {
+                top: 4rem;
+                right: 0.75rem;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .main-content {
+                padding: 0.5rem;
+            }
+            .search-card {
+                padding: 0.75rem;
+                margin: 0.25rem;
+            }
+            .search-title h1 {
+                font-size: 1.3rem;
+            }
+            .logo {
+                font-size: 1.2rem;
+            }
+            .logo-img {
+                height: 45px;
+            }
+            .tab-bar-inner {
+                padding: 0 0.5rem;
+            }
+            .tab-btn {
+                padding: 0.6rem 0.5rem;
+                font-size: 0.78rem;
+            }
+            .form-modal-box {
+                padding: 1rem;
+                max-width: calc(100vw - 1rem);
+            }
+            .form-modal-title {
+                font-size: 0.95rem;
+            }
+            .watch-item {
+                padding: 0.75rem;
+            }
+            .stores-grid {
+                gap: 0.5rem;
+            }
+
+            /* Results — ultra compact for very small screens */
+            .results-title {
+                font-size: 1.05rem;
+            }
+            .search-query-term {
+                max-width: 150px;
+                font-size: 0.8rem;
+            }
+            .results-header > .btn {
+                width: 100%;
+                justify-content: center;
+            }
+            .layout-toggle {
+                flex: 1 1 100%;
+                justify-content: center;
+            }
+            .products-grid {
+                padding: 0.4rem;
+            }
+            .product-card {
+                padding: 0.625rem;
+            }
+            .store-header {
+                padding: 0.75rem;
+            }
+            .store-info {
+                gap: 0.625rem;
             }
         }
 
@@ -1945,7 +2247,7 @@ HTML_TEMPLATE = '''
             font-size: 0.875rem;
             color: var(--text-secondary);
         }
-        .watchlist-actions { display: flex; gap: 0.75rem; align-items: center; flex-shrink: 0; }
+        .watchlist-actions { display: flex; gap: 0.75rem; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
         .watchlist-update-status {
             display: flex;
             align-items: center;
@@ -2279,6 +2581,7 @@ HTML_TEMPLATE = '''
             background: rgb(37 99 235 / 0.05);
             border: 1px solid rgb(37 99 235 / 0.2);
             border-radius: var(--radius-lg);
+            overflow-wrap: anywhere;
             margin-bottom: 1.5rem;
             color: var(--text-secondary);
             font-size: 0.9rem;
@@ -2580,6 +2883,13 @@ HTML_TEMPLATE = '''
         .btn-telegram svg { flex-shrink: 0; }
 
         /* Telegram Modal */
+        #telegram-modal .form-modal-box {
+            max-height: calc(100vh - 2rem);
+            max-height: calc(100dvh - 2rem);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
         #telegram-modal .modal-body { padding: 24px; }
         .tg-status {
             display: flex;
@@ -2636,6 +2946,44 @@ HTML_TEMPLATE = '''
         }
         .tg-actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
         .tg-actions .btn { flex: 1; min-width: 110px; }
+        .tg-confirm {
+            margin-top: 18px;
+            padding: 16px;
+            border-radius: var(--radius-md);
+            border: 1px solid var(--primary);
+            background: rgba(99,102,241,0.05);
+            animation: tgConfirmIn 0.25s ease;
+        }
+        @keyframes tgConfirmIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .tg-confirm-text {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin: 0 0 12px;
+            text-align: center;
+        }
+        .tg-confirm-actions { display: flex; gap: 10px; }
+        .tg-confirm-actions .btn { flex: 1; }
+        .tg-confirm-yes { min-width: 0; }
+        .tg-confirm-no { min-width: 0; }
+        @media (max-width: 480px) {
+            #telegram-modal .form-modal-box {
+                padding: 1.25rem;
+                margin: 0.5rem;
+                max-width: 100%;
+                border-radius: var(--radius-lg);
+            }
+            #telegram-modal .form-modal-title { font-size: 1rem; margin-bottom: 1rem; }
+            .tg-field-row { flex-direction: column; align-items: stretch; }
+            .tg-field-row button { height: 38px; }
+            .tg-guide-steps { padding: 10px 12px; font-size: 0.78rem; line-height: 1.6; }
+            .tg-guide-steps ol { padding-left: 14px; }
+            .tg-actions .btn { min-width: 0; font-size: 0.8rem; padding: 0.5rem 0.75rem; }
+            .tg-confirm-actions { flex-direction: column; }
+        }
 
         /* Theme Switch Pill */
         .theme-switch {
@@ -2676,7 +3024,7 @@ HTML_TEMPLATE = '''
         <header class="app-header">
             <div class="header-content">
                 <a href="#" class="logo" onclick="resetSearch()">
-                    <img src="/logo2.png" alt="TechOfertas" style="height:70px;">
+                    <img src="/logo2.png" alt="TechOfertas" class="logo-img">
                 </a>
 
 
@@ -2978,7 +3326,7 @@ HTML_TEMPLATE = '''
                         <li>Envie o comando <code>/newbot</code> e siga as instruções para dar um nome ao bot.</li>
                         <li>O BotFather vai te enviar o <b>Token</b> (parece com <code>123456789:ABCdef...</code>). Cole-o no campo acima.</li>
                         <li>Abra uma conversa com o seu novo bot e envie qualquer mensagem (ex: <code>oi</code>).</li>
-                        <li>Cole o Token no campo acima e clique em <b>Detectar</b> para preencher o Chat ID automaticamente.</li>
+                        <li>Clique em <b>Detectar</b> para preencher o Chat ID automaticamente.</li>
                         <li>Clique em <b>Salvar</b> e depois em <b>Testar</b> para confirmar que está funcionando.</li>
                         <li>A partir de agora, quando o preço de um produto acompanhado cair ou atingir seu alvo, você receberá uma mensagem no Telegram.</li>
                         <li><b>Dica:</b> Você pode pesquisar por <code>@userinfobot</code> no Telegram e enviar <code>/start</code> para ver seu Chat ID diretamente.</li>
@@ -2987,10 +3335,17 @@ HTML_TEMPLATE = '''
             </details>
 
             <div class="tg-actions">
-                <button class="btn btn-outline" onclick="closeTelegramModal()">Cancelar</button>
                 <button class="btn btn-outline" id="btn-tg-test" onclick="testTelegram()" style="display:none">Testar</button>
                 <button class="btn btn-danger" id="btn-tg-remove" onclick="removeTelegram()" style="display:none;background:#ef4444;border-color:#ef4444;color:#fff">Remover</button>
                 <button class="btn btn-primary" onclick="saveTelegram()">Salvar</button>
+            </div>
+
+            <div id="tg-confirm-box" class="tg-confirm" style="display:none">
+                <p class="tg-confirm-text">Você recebeu a mensagem de teste no Telegram?</p>
+                <div class="tg-confirm-actions">
+                    <button class="btn btn-primary tg-confirm-yes" onclick="confirmTelegramYes()">Sim, recebi</button>
+                    <button class="btn btn-outline tg-confirm-no" onclick="confirmTelegramNo()">Não recebi</button>
+                </div>
             </div>
         </div>
     </div>
@@ -3290,6 +3645,8 @@ HTML_TEMPLATE = '''
             _lastSearchResults = {};
             _melhoresVisibleCount = MELHORES_PAGE_SIZE;
             _melhoresAllProducts = [];
+            Object.keys(_storeExpanded).forEach(k => delete _storeExpanded[k]);
+            Object.keys(_storeAllProducts).forEach(k => delete _storeAllProducts[k]);
 
             autoUpdatePaused = true; // pause background auto-updates during manual search
             showResultsSection();
@@ -3516,6 +3873,47 @@ HTML_TEMPLATE = '''
             return `<div class="load-more-wrap">${moreBtn}${lessBtn}</div>`;
         }
 
+        const STORE_PAGE_SIZE = 18;
+        const _storeAllProducts = {}; // storeId → full array of valid products
+        const _storeExpanded = {};    // storeId → true if showing all products
+
+        function _storePaginationHTML(storeId, total) {
+            if (total <= STORE_PAGE_SIZE) return '';
+            const expanded = _storeExpanded[storeId];
+            const remaining = total - STORE_PAGE_SIZE;
+            if (expanded) {
+                return `<div class="load-more-wrap" id="store-pagination-${storeId}"><button class="load-more-btn" onclick="event.stopPropagation();toggleStoreProducts('${storeId}')">Menos resultados</button></div>`;
+            } else {
+                return `<div class="load-more-wrap" id="store-pagination-${storeId}"><button class="load-more-btn" onclick="event.stopPropagation();toggleStoreProducts('${storeId}')">Mais resultados<span class="load-more-count">(+${remaining})</span></button></div>`;
+            }
+        }
+
+        function toggleStoreProducts(storeId) {
+            const all = _storeAllProducts[storeId];
+            if (!all || all.length === 0) return;
+            const wasExpanded = _storeExpanded[storeId];
+            _storeExpanded[storeId] = !wasExpanded;
+            const grid = document.getElementById(`grid-${storeId}`);
+            if (!grid) return;
+            const display = _storeExpanded[storeId] ? all : all.slice(0, STORE_PAGE_SIZE);
+            const compactHeader = _currentLayout === 'compact' ? '<div class="compact-header-row"><span></span><span>Produto</span><span>Preço</span><span>Parcelamento</span><span></span></div>' : '';
+            grid.innerHTML = compactHeader + display.map(p => _currentLayout === 'compact' ? createProductCardCompact(p) : createProductCard(p)).join('');
+            // Update pagination button
+            const wrap = document.getElementById(`store-pagination-${storeId}`);
+            const newHTML = _storePaginationHTML(storeId, all.length);
+            if (wrap) {
+                if (newHTML) { wrap.outerHTML = newHTML; } else { wrap.remove(); }
+            } else if (newHTML) {
+                const content = document.getElementById(`content-${storeId}`);
+                if (content) content.insertAdjacentHTML('beforeend', newHTML);
+            }
+            // Ao colapsar, scrola até o topo do card da loja
+            if (wasExpanded) {
+                const card = document.getElementById(`store-${storeId}`);
+                if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
         function createStoreSection(storeId, title, products, storeType) {
             const validProducts = products.filter(product => product.preco !== '-');
             const hasProducts = validProducts.length > 0;
@@ -3528,6 +3926,11 @@ HTML_TEMPLATE = '''
                 _melhoresAllProducts = validProducts;
                 displayProducts = validProducts.slice(0, _melhoresVisibleCount);
                 paginationHTML = _melhoresPaginationHTML(validProducts.length);
+            } else if (!isMelhores && hasProducts) {
+                // Store sections: limit to STORE_PAGE_SIZE, toggle shows all
+                _storeAllProducts[storeId] = validProducts;
+                displayProducts = _storeExpanded[storeId] ? validProducts : validProducts.slice(0, STORE_PAGE_SIZE);
+                paginationHTML = _storePaginationHTML(storeId, validProducts.length);
             }
 
             return `
@@ -3826,6 +4229,9 @@ HTML_TEMPLATE = '''
         let _activeTab = 'buscar'; // tracks which tab is visible
         const _updatingIds = new Set(); // items currently being fetched (prevents duplicates)
         let _updateAllRunning = false;  // true while updateAllWatched SSE is open
+        const _wlUpdateQueue = [];      // fila de ids aguardando atualização individual
+        let _wlQueueRunning = false;    // true enquanto a fila estiver processando
+        let _wlQueueTotal = 0;         // total de itens adicionados na fila atual (para exibir progresso)
 
         function _watchlistVisible() {
             return _activeTab === 'watchlist';
@@ -4080,6 +4486,8 @@ HTML_TEMPLATE = '''
             // Reset pagination so displayResults/createStoreSection handles it
             _melhoresVisibleCount = MELHORES_PAGE_SIZE;
             _melhoresAllProducts = [];
+            Object.keys(_storeExpanded).forEach(k => delete _storeExpanded[k]);
+            Object.keys(_storeAllProducts).forEach(k => delete _storeAllProducts[k]);
 
             // Compute melhores from cached data (full list — pagination handled by createStoreSection)
             const todas = Object.values(resultados).flat();
@@ -4095,49 +4503,131 @@ HTML_TEMPLATE = '''
             }
         }
 
+        function _wlQueueSpinnerAdd(id) {
+            const el = document.getElementById(`wi-${id}`);
+            if (!el) return;
+            el.classList.add('updating');
+            const actEl = el.querySelector('.watch-item-actions');
+            if (actEl && !actEl.querySelector('.watch-spinner')) {
+                const sp = document.createElement('div'); sp.className = 'watch-spinner'; actEl.prepend(sp);
+            }
+        }
+
+        function _wlQueueSpinnerRemove(id) {
+            const el = document.getElementById(`wi-${id}`);
+            if (!el) return;
+            el.classList.remove('updating');
+            const sp = el.querySelector('.watch-spinner');
+            if (sp) sp.remove();
+        }
+
+        // Reaplica spinners nos cards após renderWatchlist() apagar o DOM
+        function _wlReapplySpinners() {
+            _updatingIds.forEach(id => _wlQueueSpinnerAdd(id));
+            _wlUpdateQueue.forEach(id => _wlQueueSpinnerAdd(id));
+        }
+
+        function _wlQueueStatusShow(text) {
+            if (!_watchlistVisible()) return;
+            const statusEl = document.getElementById('watchlist-update-status');
+            const statusText = document.getElementById('watchlist-status-text');
+            if (statusEl) statusEl.style.display = 'flex';
+            if (statusText) statusText.textContent = text;
+        }
+
+        function _wlQueueStatusHide() {
+            // Só esconde se o updateAll não estiver rodando
+            if (_updateAllRunning) return;
+            const statusEl = document.getElementById('watchlist-update-status');
+            if (statusEl) statusEl.style.display = 'none';
+        }
+
         function updateWatchItem(id) {
-            // Nunca iniciar duas buscas simultâneas para o mesmo produto
-            if (_updatingIds.has(id)) return;
+            // Ignorar se já está na fila ou sendo atualizado
+            if (_updatingIds.has(id) || _wlUpdateQueue.includes(id)) return;
 
             const item = watchlistData.find(i => i.id === id);
             if (!item) return;
 
-            // Sempre atualiza em background — sem mudar de aba nem abrir resultados na tela
+            _wlUpdateQueue.push(id);
+            _wlQueueTotal++;
+
+            // Spinner imediato no card — mesmo que ainda não começou a processar
+            _wlQueueSpinnerAdd(id);
+
+            // Mostrar status bar imediatamente com total na fila
+            const pending = _wlUpdateQueue.length + (_wlQueueRunning ? 1 : 0);
+            _wlQueueStatusShow(`${pending} produto(s) na fila de atualização...`);
+
+            _processWlQueue();
+        }
+
+        function _processWlQueue() {
+            // Se já está rodando ou a fila está vazia, não faz nada
+            if (_wlQueueRunning || _wlUpdateQueue.length === 0) return;
+
+            const id = _wlUpdateQueue.shift();
+            const item = watchlistData.find(i => i.id === id);
+            if (!item) {
+                // Item sumiu da watchlist — pula para o próximo
+                _processWlQueue();
+                return;
+            }
+
+            _wlQueueRunning = true;
             _updatingIds.add(id);
+
+            // Status bar: mostra qual está sendo atualizado agora e quantos restam
+            const done = _wlQueueTotal - _wlUpdateQueue.length - 1; // itens já concluídos
+            const current = done + 1;
+            _wlQueueStatusShow(`[${current}/${_wlQueueTotal}] Atualizando "${escHtml(item.query || item.nome || id)}"...`);
+
             _updateWatchSimple(id, item);
         }
 
         function _updateWatchSimple(id, item) {
-            const el = document.getElementById(`wi-${id}`);
-            if (el) {
-                el.classList.add('updating');
-                const actEl = el.querySelector('.watch-item-actions');
-                if (actEl && !actEl.querySelector('.watch-spinner')) {
-                    const sp = document.createElement('div'); sp.className = 'watch-spinner'; actEl.prepend(sp);
-                }
-            }
+            // Spinner já foi adicionado em updateWatchItem; garante que está presente caso
+            // renderWatchlist() tenha sido chamado entre o enfileiramento e o início do processamento
+            _wlQueueSpinnerAdd(id);
+
             const src = new EventSource(`/watchlist/update/${id}`);
             src.onmessage = function(evt) {
                 let data; try { data = JSON.parse(evt.data); } catch(e) { return; }
                 if (data.type === 'done' || data.type === 'error') {
                     src.close();
                     _updatingIds.delete(id);
+                    _wlQueueRunning = false;
                     if (data.type === 'error') {
                         showNotification(data.mensagem || 'Erro ao atualizar.', 'error');
+                        _wlQueueSpinnerRemove(id);
                     } else {
                         if (data.todos_resultados) wlCacheSave(id, data.todos_resultados);
                         _applyUpdateResult(id, data);
                         renderWatchlist();
+                        _wlReapplySpinners();
+                    }
+                    // Se a fila esvaziou, reseta contadores e esconde status bar
+                    if (_wlUpdateQueue.length === 0) {
+                        _wlQueueTotal = 0;
+                        _wlQueueStatusHide();
                     }
                     loadWatchlist();
                     scheduleNextAutoUpdate();
+                    _processWlQueue();
                 }
             };
             src.onerror = function() {
                 src.close();
                 _updatingIds.delete(id);
+                _wlQueueRunning = false;
+                _wlQueueSpinnerRemove(id);
+                if (_wlUpdateQueue.length === 0) {
+                    _wlQueueTotal = 0;
+                    _wlQueueStatusHide();
+                }
                 loadWatchlist();
                 scheduleNextAutoUpdate();
+                _processWlQueue();
             };
         }
 
@@ -4836,7 +5326,7 @@ HTML_TEMPLATE = '''
             const delay = Math.max(2000, minDelay + 2000);
             _autoUpdateTimer = setTimeout(function() {
                 _autoUpdateTimer = null;
-                if (autoUpdatePaused || watchUpdateSource || _updateAllRunning || _updatingIds.size > 0) {
+                if (autoUpdatePaused || watchUpdateSource || _updateAllRunning || _updatingIds.size > 0 || _wlUpdateQueue.length > 0) {
                     // Retry in 10s if paused or any update already in progress
                     _autoUpdateTimer = setTimeout(scheduleNextAutoUpdate, 10000);
                     return;
@@ -4932,6 +5422,7 @@ HTML_TEMPLATE = '''
         }
 
         function closeTelegramModal() {
+            document.getElementById('tg-confirm-box').style.display = 'none';
             document.getElementById('telegram-modal').style.display = 'none';
         }
 
@@ -5008,17 +5499,52 @@ HTML_TEMPLATE = '''
         function testTelegram() {
             const token = document.getElementById('tg-token').value.trim();
             const chatId = document.getElementById('tg-chat-id').value.trim();
+            const confirmBox = document.getElementById('tg-confirm-box');
+            confirmBox.style.display = 'none';
             _showTgStatus('ok', 'Enviando mensagem de teste...');
             fetch('/telegram/test', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ token: token || undefined, chat_id: chatId || undefined }) })
                 .then(r => r.json())
                 .then(d => {
                     if (d.ok) {
-                        _showTgStatus('ok', '✓ Mensagem enviada com sucesso! Verifique o Telegram.');
+                        _showTgStatus('ok', 'Mensagem enviada! Confira no seu Telegram.');
+                        confirmBox.style.display = '';
                     } else {
                         _showTgStatus('not-ok', d.error || 'Falha ao enviar mensagem.');
                     }
                 })
                 .catch(() => _showTgStatus('not-ok', 'Erro de rede.'));
+        }
+
+        function confirmTelegramYes() {
+            document.getElementById('tg-confirm-box').style.display = 'none';
+            // Salvar config (reutiliza lógica do saveTelegram, mas fecha ao final)
+            const token = document.getElementById('tg-token').value.trim();
+            const chatId = document.getElementById('tg-chat-id').value.trim();
+            if (!chatId) { _showTgStatus('not-ok', 'Preencha o Chat ID.'); return; }
+            const payload = token ? { token, chat_id: chatId } : null;
+            if (!payload) {
+                // Já está salvo (token em branco = mantém atual) — fecha direto
+                closeTelegramModal();
+                showNotification('Alertas no Telegram configurados corretamente!', 'success');
+                return;
+            }
+            fetch('/telegram/config', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.ok) {
+                        updateTelegramButton(true);
+                        closeTelegramModal();
+                        showNotification('Alertas no Telegram configurados corretamente!', 'success');
+                    } else {
+                        _showTgStatus('not-ok', d.error || 'Erro ao salvar.');
+                    }
+                })
+                .catch(() => _showTgStatus('not-ok', 'Erro de rede ao salvar.'));
+        }
+
+        function confirmTelegramNo() {
+            document.getElementById('tg-confirm-box').style.display = 'none';
+            _showTgStatus('not-ok', 'Verifique o Token e Chat ID e refaça o passo a passo do tutorial acima.');
         }
         // ─────────────────────────────────────────────────────────────────
     </script>
