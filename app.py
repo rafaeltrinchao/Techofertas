@@ -1339,23 +1339,20 @@ HTML_TEMPLATE = '''
         .btn-track-search {
             display: inline-flex;
             align-items: center;
-            gap: 0.3rem;
-            padding: 0.25rem 0.65rem;
-            font-size: 0.78rem;
+            padding: 0.3rem 0.75rem;
+            font-size: 0.75rem;
             font-weight: 600;
-            color: var(--primary-color);
-            background: rgba(99, 102, 241, 0.08);
-            border: 1px solid rgba(99, 102, 241, 0.25);
-            border-radius: 999px;
+            color: #fff;
+            background: var(--primary-color);
+            border: none;
+            border-radius: var(--radius-md);
             cursor: pointer;
             transition: all 0.15s ease;
             white-space: nowrap;
             font-family: inherit;
-            vertical-align: baseline;
         }
         .btn-track-search:hover {
-            background: rgba(99, 102, 241, 0.15);
-            border-color: var(--primary-color);
+            background: var(--primary-hover);
         }
 
         /* Store Results */
@@ -3349,7 +3346,7 @@ HTML_TEMPLATE = '''
                         <div class="search-query-display" id="search-query-display" style="display:none">
                             <span class="search-query-label">Buscando por</span>
                             <span class="search-query-term" id="search-term"></span>
-                            <button class="btn-track-search" id="btn-track-search" onclick="openTrackSearchModal()" title="Acompanhar preços deste produto">👁️ Acompanhar</button>
+                            <button class="btn-track-search" id="btn-track-search" onclick="openTrackSearchModal()" title="Acompanhar preços deste produto">Acompanhar melhores preços deste produto</button>
                         </div>
                         <p class="results-count" id="total-count"></p>
                     </div>
