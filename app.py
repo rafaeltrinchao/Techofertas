@@ -21,6 +21,9 @@ except ImportError:
     _cffi_requests = None
     _CB_SESSION = None
 
+# Cache do buildId da Magalu (invalidado automaticamente em caso de 404)
+_MAGALU_BUILD_ID = None
+
 # PyInstaller: bundled assets live in sys._MEIPASS; user data lives next to the exe
 import sys as _sys
 _BUNDLE_DIR = Path(getattr(_sys, '_MEIPASS', Path(__file__).parent))
@@ -4283,28 +4286,21 @@ def buscar_mercadolivre(produto, valor_minimo, valor_maximo):
 
 
 def buscar_magalu(produto, valor_minimo, valor_maximo):
-    """Busca via __NEXT_DATA__ JSON (igual KaBuM) — 1 request, dados estruturados."""
+    """
+    Busca via Next.js data API (/_next/data/{buildId}/busca/{slug}.json):
+    - BuildId cacheado em módulo → ~1s (warm) vs ~3s (cold)
+    - Cold: busca HTML completo, extrai buildId + produtos, aquece cache
+    - Warm: chama API JSON diretamente (~1.1s, 3x mais rápido)
+    - Em caso de 404 (buildId expirou): invalida cache e refaz via HTML
+
+    Otimização: ~3s → ~1s nas buscas subsequentes
+    """
+    global _MAGALU_BUILD_ID
     ofertas = []
-    try:
-        slug = urllib.parse.quote_plus(produto.strip())
-        url = f'https://www.magazineluiza.com.br/busca/{slug}/'
-        html = http_get(url, referer='https://www.magazineluiza.com.br/')
 
-        m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
-        if not m:
-            return [], False
-        payload = json.loads(m.group(1))
-        products = (
-            payload.get('props', {})
-            .get('pageProps', {})
-            .get('data', {})
-            .get('search', {})
-            .get('products', [])
-        )
-        if not products:
-            return [], False
-        encontrou = len(products) > 0
-
+    def _parse_products(products):
+        """Extrai ofertas da lista de produtos da Magalu."""
+        resultado = []
         for p in products:
             if not p.get('available'):
                 continue
@@ -4313,7 +4309,6 @@ def buscar_magalu(produto, valor_minimo, valor_maximo):
                 continue
             if not nome_compativel_com_busca(nome, produto):
                 continue
-
             price_data = p.get('price') or {}
             preco_str = price_data.get('bestPrice') or price_data.get('fullPrice')
             if not preco_str:
@@ -4322,18 +4317,12 @@ def buscar_magalu(produto, valor_minimo, valor_maximo):
                 preco_valor = float(preco_str)
             except (TypeError, ValueError):
                 continue
-            if preco_valor <= 0:
+            if preco_valor <= 0 or not (valor_minimo <= preco_valor <= valor_maximo):
                 continue
-
-            if not (valor_minimo <= preco_valor <= valor_maximo):
-                continue
-
             path = p.get('path') or ''
             link = f'https://www.magazineluiza.com.br{path}' if path.startswith('/') else ''
-
             img_url = p.get('image') or ''
             imagem = img_url.replace('{w}x{h}', '400x400') if '{w}' in img_url else img_url
-
             parcelamento = None
             inst = p.get('installment') or {}
             qty = inst.get('quantity')
@@ -4347,14 +4336,84 @@ def buscar_magalu(produto, valor_minimo, valor_maximo):
                         parcelamento = {'parcelas': n_parc, 'valor': val_parc, 'sem_juros': sem_juros}
                 except (TypeError, ValueError):
                     pass
+            resultado.append({'nome': nome, 'preco': preco_valor, 'link': link, 'imagem': imagem, 'parcelamento': parcelamento})
+        return resultado
 
-            ofertas.append({'nome': nome, 'preco': preco_valor, 'link': link, 'imagem': imagem, 'parcelamento': parcelamento})
+    def _fetch_via_html(slug):
+        """Busca HTML completa — lenta (~3s) mas extrai buildId para aquecer cache."""
+        url = f'https://www.magazineluiza.com.br/busca/{slug}/'
+        if _CB_SESSION is not None:
+            r = _CB_SESSION.get(url, timeout=15)
+            html = r.text if r.status_code == 200 else ''
+        else:
+            html = http_get(url, referer='https://www.magazineluiza.com.br/')
+        if not html:
+            return None, None
+        # Extrair buildId
+        bid_m = re.search(r'"buildId":"([^"]+)"', html)
+        new_bid = bid_m.group(1) if bid_m else None
+        # Extrair produtos do __NEXT_DATA__
+        nd_m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
+        if not nd_m:
+            return new_bid, None
+        payload = json.loads(nd_m.group(1))
+        products = (
+            payload.get('props', {})
+            .get('pageProps', {})
+            .get('data', {})
+            .get('search', {})
+            .get('products', [])
+        )
+        return new_bid, products
 
+    def _fetch_via_api(slug, build_id):
+        """Busca via _next/data API — rápida (~1s) quando buildId está em cache."""
+        url = f'https://www.magazineluiza.com.br/_next/data/{build_id}/busca/{slug}.json'
+        if _CB_SESSION is not None:
+            r = _CB_SESSION.get(url, timeout=10)
+        else:
+            req = urllib.request.Request(url, headers=dict(HTTP_HEADERS))
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                r = type('R', (), {'status_code': resp.status, 'json': lambda: json.loads(resp.read().decode())})()
+        if r.status_code == 404:
+            return None  # buildId expirou
+        if r.status_code != 200:
+            return []
+        products = (
+            r.json()
+            .get('pageProps', {})
+            .get('data', {})
+            .get('search', {})
+            .get('products', [])
+        )
+        return products
+
+    try:
+        slug = urllib.parse.quote_plus(produto.strip())
+        products = None
+
+        # Busca quente: tentar API direta se buildId estiver cacheado
+        if _MAGALU_BUILD_ID:
+            products = _fetch_via_api(slug, _MAGALU_BUILD_ID)
+            if products is None:
+                # buildId expirou — invalidar e cair no fallback HTML
+                _MAGALU_BUILD_ID = None
+
+        # Busca fria (ou após invalidação): HTML completo + extração de buildId
+        if products is None:
+            new_bid, products = _fetch_via_html(slug)
+            if new_bid:
+                _MAGALU_BUILD_ID = new_bid
+
+        if not products:
+            return [], False
+
+        ofertas = _parse_products(products)
         ofertas.sort(key=lambda x: x['preco'])
+        return ofertas, len(products) > 0
     except Exception as e:
         print(f'Erro Magalu: {e}')
         return [], False
-    return ofertas, encontrou
 
 
 def buscar_amazon(produto, valor_minimo, valor_maximo):
@@ -4436,27 +4495,31 @@ def buscar_amazon(produto, valor_minimo, valor_maximo):
 
 def buscar_shopee(produto, valor_minimo, valor_maximo):
     """
-    Busca na Shopee via Googlebot SSR (JSON-LD):
-    - 1 req busca → lista de produtos (nome, imagem, url)
-    - N reqs produto em paralelo → precos via JSON-LD offers
+    Busca na Shopee via Googlebot SSR + curl_cffi (JSON-LD):
+    - 4 sorts em paralelo (pop, price, sales, ctime) → ~30-40 produtos únicos
+    - N reqs produto em paralelo (20 workers) → precos via JSON-LD offers
+    - curl_cffi como motor HTTP (TLS fingerprint ~8x mais rápido que urllib)
+    - urllib como fallback se curl_cffi indisponível
+
+    Otimização v3: ~21s/10 produtos → ~3-4s/30-40 produtos
     """
     UA_BOT = 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'
+    _HEADERS_BOT = {
+        'User-Agent': UA_BOT,
+        'Accept': 'text/html',
+        'Accept-Language': 'pt-BR,pt;q=0.9',
+    }
 
-    def _bot_get(url):
+    def _bot_get(url, timeout=8):
+        """GET com Googlebot UA — usa curl_cffi se disponível, senão urllib."""
         try:
-            safe = re.sub(r'[^\x00-\x7F]', '', url)
-            if not safe or len(safe) < 20:
-                p = urllib.parse.urlsplit(url)
-                safe = f"{p.scheme}://{p.netloc}{urllib.parse.quote(p.path, safe='/-_.')}"
-                if p.query:
-                    safe += '?' + p.query
-            req = urllib.request.Request(safe, headers={
-                'User-Agent': UA_BOT,
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'pt-BR,pt;q=0.9',
-            })
-            with urllib.request.urlopen(req, timeout=20) as r:
-                return r.read().decode('utf-8', 'replace')
+            if _cffi_requests is not None:
+                r = _cffi_requests.get(url, headers=_HEADERS_BOT, timeout=timeout, impersonate=None)
+                return r.text if r.status_code == 200 else ''
+            else:
+                req = urllib.request.Request(url, headers=_HEADERS_BOT)
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    return r.read().decode('utf-8', 'replace')
         except Exception:
             return ''
 
@@ -4503,34 +4566,33 @@ def buscar_shopee(produto, valor_minimo, valor_maximo):
 
     ofertas = []
     try:
-        kw = urllib.parse.quote(produto.strip())
-        sorts = ['pop', 'price', 'newest', 'sales']
-        urls_busca = [f'https://shopee.com.br/search?keyword={kw}&page=0&sortBy={s}' for s in sorts]
-
         from concurrent.futures import as_completed as _as_completed
 
-        # Busca 4 sorts em paralelo para maximizar produtos únicos
-        vistos = set()
-        produtos = []
-        with ThreadPoolExecutor(max_workers=4) as ex:
-            futuros = {ex.submit(_bot_get, u): u for u in urls_busca}
-            for fut in _as_completed(futuros):
-                try:
-                    html_busca = fut.result()
-                    for p in _parse_busca(html_busca):
-                        link = p['link']
-                        if link and link not in vistos:
-                            vistos.add(link)
-                            produtos.append(p)
-                except Exception:
-                    pass
+        kw = urllib.parse.quote(produto.strip())
 
+        # Fase 1: 4 sorts em paralelo → máximo de produtos únicos (~30-40)
+        # Paginação não funciona (page>0 retorna vazio no SSR), mas sorts
+        # diferentes retornam conjuntos parcialmente disjuntos.
+        _SORTS = ('pop', 'price', 'sales', 'ctime')
+        produtos_uniq = {}
+
+        def _fetch_sort(sort):
+            html = _bot_get(f'https://shopee.com.br/search?keyword={kw}&page=0&sortBy={sort}', timeout=12)
+            return _parse_busca(html)
+
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            futuros = {ex.submit(_fetch_sort, s): s for s in _SORTS}
+            for fut in _as_completed(futuros):
+                for p in fut.result():
+                    produtos_uniq[p['link']] = p
+
+        produtos = list(produtos_uniq.values())
         if not produtos:
             return [], False
 
-        # Busca preço de cada produto em paralelo
+        # Fase 2: preços em paralelo (20 workers — requests são leves)
         com_preco = []
-        with ThreadPoolExecutor(max_workers=10) as ex:
+        with ThreadPoolExecutor(max_workers=20) as ex:
             futuros = {ex.submit(_get_preco, p): p for p in produtos}
             for fut in _as_completed(futuros):
                 try:

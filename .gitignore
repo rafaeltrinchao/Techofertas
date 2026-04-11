@@ -5,3 +5,4 @@ venv/
 watchlist.json
 *.log
 .claude/
+docs/
