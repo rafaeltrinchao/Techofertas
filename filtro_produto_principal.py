@@ -39,7 +39,6 @@ ACESSORIOS_PALAVRAS = {
     # Carregadores e cabos (quando não são o foco da query)
     "carregador", "cabo", "adaptador", "hub", "dock",
     "fonte", "tomada", "bivolt",
-    "usbc", "usb c",
     # Suportes / apoios
     "suporte", "stand", "base", "apoio", "fixacao", "fixador",
     "wall mount", "bracket",
@@ -97,15 +96,26 @@ PREFIXOS_ACESSORIO = [
     r"^capa\b",
     r"^capinha\b",
     r"^case\b",
+    r"^cover\b",
     r"^pelicula\b",
-    r"^kit\s+\d",          # "Kit 2 películas", "Kit 3 capas"
+    r"^vidro\s+temperado",  # "Vidro Temperado iPhone..."
+    r"^mica\b",
+    r"^protetor\b",
+    r"^protetora\b",
+    r"^kit\s+\d",           # "Kit 2 películas", "Kit 3 capas"
     r"^suporte\b",
     r"^stand\b",
     r"^cabo\b",
     r"^carregador\b",
     r"^fonte\b",
     r"^adaptador\b",
+    r"^hub\b",
+    r"^dock\b",
+    r"^enclosure\b",
+    r"^gaveta\b",
     r"^bateria\b",
+    r"^powerbank\b",
+    r"^power\s+bank\b",
     r"^controle\b",
     r"^jogo\b",
     r"^game\b",
@@ -118,6 +128,10 @@ PREFIXOS_ACESSORIO = [
     r"^caneta\b",
     r"^cooler\b",
     r"^pasta\s+termica",
+    r"^skin\b",
+    r"^adesivo\b",
+    r"^manga\b",            # "Manga para notebook" (sleeve)
+    r"^sleeve\b",
 ]
 
 # Palavras-chave que, se presentes na query, indicam que é um produto principal
@@ -128,10 +142,12 @@ PRODUTO_PRINCIPAL_INDICADORES = {
     "console", "playstation", "xbox", "nintendo", "switch", "ps5", "ps4",
     # Tablets
     "ipad", "tablet",
-    # Smartphones
+    # Smartphones / marcas específicas
     "iphone", "smartphone", "celular",
-    # Computadores
+    "galaxy", "pixel", "oneplus", "xiaomi", "redmi",
+    # Computadores e marcas específicas
     "notebook", "laptop", "desktop", "pc", "computador",
+    "macbook", "surface",
     # Componentes PC (quando a query é específica)
     "rtx", "gtx", "rx", "placa de video", "placa de vídeo", "gpu",
     "processador", "cpu", "ryzen", "core i",
@@ -139,9 +155,10 @@ PRODUTO_PRINCIPAL_INDICADORES = {
     "fonte atx",
     "monitor",
     # Áudio (quando é o produto principal)
-    "caixa de som", "soundbar",
-    # Eletrodomésticos
+    "caixa de som", "soundbar", "airpods",
+    # Eletrodomésticos / smart home
     "geladeira", "tv", "televisao", "televisão",
+    "roteador", "router",
 }
 
 
@@ -228,6 +245,11 @@ def is_produto_principal(titulo: str, query: str) -> bool:
             1d. Query tem especificação do próprio acessório ("cabo USB-C",
                 "carregador 20W") → manter tudo (o acessório É o produto)
 
+        PASSO 1.5 — Título contém "para [token_query]" / "compatível com [token]"?
+            → sinal universal de acessório em e-commerce BR; descartar
+            Cobre MacBook, Galaxy, Surface e qualquer produto futuro sem
+            necessidade de manutenção de listas.
+
         PASSO 2 — Título começa com prefixo de acessório?
             (regex no início do título normalizado) → descartar
 
@@ -307,6 +329,28 @@ def is_produto_principal(titulo: str, query: str) -> bool:
             titulo_tokens[:len(palavra_produto_tokens)] == palavra_produto_tokens
         )
         return titulo_comeca_com_produto  # True = produto, False = acessório do produto
+
+    # ------------------------------------------------------------------
+    # PASSO 1.5: "Para [token_da_query]" / "compatível com [token]" / "p/ [token]"
+    # Sinal universal de acessório em e-commerce brasileiro.
+    # Fonte: ML treina vendedores a usar "para X" / "compatível com X" para acessórios.
+    # Funciona para qualquer produto sem manutenção de listas:
+    #   "Sleeve para MacBook Air", "Hub para MacBook Pro",
+    #   "Capa para Galaxy S24", "Suporte para Surface Pro",
+    #   "Película compatível com iPhone 15", "Cabo p/ iPad Air"
+    # ------------------------------------------------------------------
+    for qt in tokens_query:
+        if len(qt) < 3:
+            continue  # ignora artigos, prep., números curtos ("de", "15", "m2")
+        # "para macbook", "para o macbook", "para a iphone" etc.
+        if re.search(r'\bpara\s+(?:[oa]s?\s+)?' + re.escape(qt) + r'\b', titulo_norm):
+            return False
+        # "p/ macbook", "p/iphone"
+        if re.search(r'\bp\s*/\s*' + re.escape(qt) + r'\b', titulo_norm):
+            return False
+        # "compatível com macbook", "compatible macbook"
+        if re.search(r'\bcompat[a-z]*\b(?:\s+com)?\s+' + re.escape(qt) + r'\b', titulo_norm):
+            return False
 
     # ------------------------------------------------------------------
     # PASSO 2: Título começa com prefixo claro de acessório?
@@ -484,6 +528,58 @@ SUITE = [
     ("headset gamer", "Headset Gamer Logitech G733 Lightspeed Sem Fio", True),
     ("headset gamer", "Suporte Headset Gamer Base Mesa RGB Alumínio", False),
     ("headset gamer", "Cabo USB Headset Gamer Reposição 2m Trançado", False),
+
+    # ===================================================================
+    # GRUPO 8: "MacBook" → laptop principal, não acessórios
+    # Teste central de PASSO 1.5 (para [token]) e expansão de listas
+    # ===================================================================
+    ("MacBook", "Apple MacBook Air M2 13 256GB 8GB Midnight MGN63BZ/A", True),
+    ("MacBook", "Apple MacBook Pro 14 M3 512GB 18GB Space Black", True),
+    ("MacBook", "Apple MacBook Air M1 256GB 8GB Preto Meia-Noite", True),
+    ("MacBook", "Skin Vinil Adesivo para MacBook Air 13 M2 Preto", False),
+    ("MacBook", "Sleeve Manga Neoprene para MacBook Pro 14 Cinza", False),
+    ("MacBook", "Hub USB-C 7 em 1 para MacBook Air Pro Alumínio", False),
+    ("MacBook", "Case para MacBook Air 13 M2 Policarbonato Cristal", False),
+    ("MacBook", "Cabo USB-C compatível com MacBook Air M2 100W 2m", False),
+    ("MacBook", "Suporte Alumínio para MacBook Pro Ajustável Vertical", False),
+    ("MacBook", "Protetor de Tela para MacBook Air M2 13 Anti-Reflexo", False),
+
+    # ===================================================================
+    # GRUPO 9: "Galaxy S24" → smartphone principal, não acessórios
+    # ===================================================================
+    ("Galaxy S24", "Samsung Galaxy S24 128GB Preto Onyx 6.1 AMOLED", True),
+    ("Galaxy S24", "Samsung Galaxy S24 Ultra 512GB Titanium Black", True),
+    ("Galaxy S24", "Capa Transparente para Galaxy S24 Silicone Clear", False),
+    ("Galaxy S24", "Película Vidro Temperado compatível com Galaxy S24", False),
+    ("Galaxy S24", "Carregador 45W para Galaxy S24 Ultra USB-C Fast", False),
+    ("Galaxy S24", "Capa Galaxy S24 Anti-Queda Premium Armor Preta", False),
+
+    # ===================================================================
+    # GRUPO 10: "Surface Pro" → tablet/laptop, não acessórios
+    # ===================================================================
+    ("Surface Pro", "Microsoft Surface Pro 9 Intel Core i5 256GB Platinum", True),
+    ("Surface Pro", "Microsoft Surface Pro 10 Intel Core Ultra 5 512GB", True),
+    ("Surface Pro", "Capa Teclado Type Cover para Surface Pro 9 Preto", False),
+    ("Surface Pro", "Película compatível com Surface Pro 9 Vidro 12.3", False),
+    ("Surface Pro", "Suporte Mesa para Surface Pro Alumínio Ajustável", False),
+
+    # ===================================================================
+    # GRUPO 11: "AirPods" → earbuds principais, não acessórios
+    # ===================================================================
+    ("AirPods", "Apple AirPods Pro 2ª Geração MagSafe USB-C MTJV3BE/A", True),
+    ("AirPods", "Apple AirPods 3ª Geração com MagSafe MPNY3BE/A", True),
+    ("AirPods", "Capa para AirPods Pro 2 Silicone com Mosquetão Azul", False),
+    ("AirPods", "Case compatível com AirPods 3 Transparente Premium", False),
+
+    # ===================================================================
+    # GRUPO 12: "notebook" genérico → "para notebook" deve filtrar acessórios
+    # ===================================================================
+    ("notebook", "Acer Aspire 5 A515 Core i5 8GB 512GB SSD 15.6 FHD", True),
+    ("notebook", "Dell Inspiron 15 3520 Intel i5 16GB 512GB SSD Win11", True),
+    ("notebook", "Suporte para Notebook Mesa Ajustável Alumínio Dobrável", False),
+    ("notebook", "Manga Neoprene para Notebook 15.6 Preta Resistente", False),
+    ("notebook", "Hub USB-C para Notebook 6 em 1 Multiporta Alumínio", False),
+    ("notebook", "Cooler para Notebook 15.6 USB Silencioso Base Refrigerada", False),
 ]
 
 

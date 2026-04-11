@@ -710,6 +710,35 @@ HTML_TEMPLATE = '''
             font-size: 0.875rem;
         }
 
+        .search-query-display {
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+            margin-top: 0.25rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .search-query-label {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+
+        .search-query-term {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--accent-color);
+            padding: 0.125rem 0.5rem;
+            background: rgba(99, 102, 241, 0.12);
+            border-radius: 4px;
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            display: inline-block;
+            vertical-align: baseline;
+        }
+
         /* Store Results */
         .store-results {
             display: flex;
@@ -1869,6 +1898,10 @@ HTML_TEMPLATE = '''
                 <div class="results-header">
                     <div>
                         <h2 class="results-title">Resultados da Busca</h2>
+                        <div class="search-query-display" id="search-query-display" style="display:none">
+                            <span class="search-query-label">Buscando por</span>
+                            <span class="search-query-term" id="search-term"></span>
+                        </div>
                         <p class="results-count" id="total-count"></p>
                     </div>
                     <div class="layout-toggle">
@@ -2085,6 +2118,8 @@ HTML_TEMPLATE = '''
         const searchForm = document.getElementById('search-form');
         const storeResults = document.getElementById('store-results');
         const totalCount = document.getElementById('total-count');
+        const searchTermEl = document.getElementById('search-term');
+        const searchQueryDisplay = document.getElementById('search-query-display');
 
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
@@ -2128,6 +2163,7 @@ HTML_TEMPLATE = '''
 
                 // Renderiza resultados salvos
                 showResultsSection();
+                _updateSearchTerm(currentSearch.produto);
                 displayResults(s.results);
                 if (s.totalCount) totalCount.textContent = s.totalCount;
 
@@ -2286,6 +2322,8 @@ HTML_TEMPLATE = '''
 
             autoUpdatePaused = true; // pause background auto-updates during manual search
             showResultsSection();
+
+            _updateSearchTerm(currentSearch.produto);
 
             totalCount.textContent = '';
 
@@ -2739,6 +2777,16 @@ HTML_TEMPLATE = '''
             initLayout();
         }
 
+        function _updateSearchTerm(produto) {
+            if (produto) {
+                searchTermEl.textContent = produto;
+                searchTermEl.title = produto;
+                searchQueryDisplay.style.display = 'flex';
+            } else {
+                searchQueryDisplay.style.display = 'none';
+            }
+        }
+
         function hideResultsSection() {
             resultsSection.style.display = 'none';
         }
@@ -3056,6 +3104,7 @@ HTML_TEMPLATE = '''
             document.getElementById('tab-watchlist').classList.remove('active');
             document.getElementById('watchlist-section').style.display = 'none';
             showResultsSection();
+            _updateSearchTerm(item.query);
 
             // Reset pagination so displayResults/createStoreSection handles it
             _melhoresVisibleCount = MELHORES_PAGE_SIZE;
@@ -3144,6 +3193,7 @@ HTML_TEMPLATE = '''
             Object.entries(item.lojas||{}).forEach(([k,v]) => { currentSearch.stores[k] = !!v; });
 
             showResultsSection();
+            _updateSearchTerm(item.query);
             _melhoresVisibleCount = MELHORES_PAGE_SIZE;
             _melhoresAllProducts = [];
 
