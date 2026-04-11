@@ -21,7 +21,516 @@ except ImportError:
     _cffi_requests = None
     _CB_SESSION = None
 
-from filtro_produto_principal import is_produto_principal, is_produto_novo
+# --- filtro_produto_principal (inlined) ---
+import re
+import unicodedata
+
+
+# ---------------------------------------------------------------------------
+# Constantes de manutenção
+# ---------------------------------------------------------------------------
+
+# Palavras que, quando presentes no TÍTULO, sinalizam que é um acessório.
+# Manutenção: adicione aqui quando surgirem falsos negativos recorrentes.
+ACESSORIOS_PALAVRAS = {
+    # Capas, proteção
+    "capa", "case", "capinha", "capas", "estoijo", "estojo",
+    "bolsa", "mochila", "pasta", "sleeve",
+    # Peliculas, vidros
+    "pelicula", "peliculas", "vidro", "mica", "protecao", "protetor", "protetora",
+    "temperado", "temperada",
+    # Carregadores e cabos (quando não são o foco da query)
+    "carregador", "cabo", "adaptador", "hub", "dock",
+    "fonte", "tomada", "bivolt",
+    # Suportes / apoios
+    "suporte", "stand", "base", "apoio", "fixacao", "fixador",
+    "wall mount", "bracket",
+    # Canetas / stylus
+    "caneta", "pencil", "stylus", "lapis",
+    # Teclados e mouses — quando NÃO são o produto buscado
+    "teclado", "mouse", "trackpad", "mousepad",
+    # Fones e áudio — quando NÃO são o produto buscado
+    "fone", "fones", "earphone", "earbud", "headset", "headphone",
+    "microfone", "microfones",
+    # Armazenamento externo / adaptadores — quando NÃO são o produto buscado
+    "enclosure", "gaveta", "case m2", "case nvme", "case sata",
+    # Periféricos de tela — quando NÃO é o produto buscado
+    "cabo hdmi", "cabo displayport", "cabo dp", "cabo vga",
+    "conversor", "splitter",
+    # Controladores / controles — quando NÃO são o produto buscado
+    "controle", "joystick", "gamepad", "volante",
+    # Jogos (físicos/digitais) — quando não se busca jogo
+    "jogo", "game", "jogos",
+    # Baterias / power banks
+    "bateria", "powerbank", "power bank", "banco de energia",
+    # Identificação explícita de acessório no título
+    "acessorio", "acessorios",
+    # Outros
+    "skin", "adesivo", "sticker", "grip", "anel", "pop socket",
+    "webcam",  # periférico
+    "impressora", "scanner",  # periféricos
+    "cooler", "ventoinha", "cooler para",
+    "pasta termica", "pasta térmica",
+    "thermal paste", "thermal pad",
+    "kit limpeza", "spray", "flanela",
+}
+
+# Palavras que, quando presentes na QUERY, indicam que o próprio acessório
+# é o produto buscado → NÃO filtrar.
+# Manutenção: espelhe ACESSORIOS_PALAVRAS conforme necessário.
+QUERY_ACESSORIO_INTENCIONAL = {
+    "capa", "case", "capinha", "pelicula", "peliculas", "protetor", "protetora",
+    "carregador", "cabo", "adaptador", "hub", "dock", "fonte",
+    "suporte", "stand", "base",
+    "caneta", "pencil", "stylus",
+    "teclado", "mouse", "mousepad",
+    "fone", "fones", "headset", "headphone", "earphone", "earbud", "microfone",
+    "enclosure", "gaveta",
+    "controle", "joystick", "gamepad",
+    "jogo", "game", "jogos",
+    "bateria", "powerbank", "power bank",
+    "cooler", "ventoinha", "pasta",   # "pasta" cobre "pasta termica"
+    "webcam", "impressora",
+    "kit", "acessorio", "acessórios",
+    "skin", "adesivo",
+}
+
+# Prefixos de título que quase sempre indicam acessório.
+# Manutenção: adicione padrões observados nos scrapers.
+PREFIXOS_ACESSORIO = [
+    r"^capa\b",
+    r"^capinha\b",
+    r"^case\b",
+    r"^cover\b",
+    r"^pelicula\b",
+    r"^vidro\s+temperado",  # "Vidro Temperado iPhone..."
+    r"^mica\b",
+    r"^protetor\b",
+    r"^protetora\b",
+    r"^kit\b",              # "Kit Viagem", "Kit 2 películas", "Kit Limpeza"
+    r"^suporte\b",
+    r"^stand\b",
+    r"^cabo\b",
+    r"^carregador\b",
+    r"^fonte\b",
+    r"^adaptador\b",
+    r"^hub\b",
+    r"^dock\b",
+    r"^enclosure\b",
+    r"^gaveta\b",
+    r"^bateria\b",
+    r"^powerbank\b",
+    r"^power\s+bank\b",
+    r"^controle\b",
+    r"^jogo\b",
+    r"^game\b",
+    r"^fone\b",
+    r"^headset\b",
+    r"^headphone\b",
+    r"^mouse\b",
+    r"^teclado\b",
+    r"^webcam\b",
+    r"^caneta\b",
+    r"^cooler\b",
+    r"^pasta\s+termica",
+    r"^skin\b",
+    r"^adesivo\b",
+    r"^manga\b",            # "Manga para notebook" (sleeve)
+    r"^sleeve\b",
+]
+
+# Palavras-chave que, se presentes na query, indicam que é um produto principal
+# com especificidade suficiente (console, tablet, smartphone...).
+# Usadas para REFORÇAR o filtro de acessórios quando a query é clara.
+PRODUTO_PRINCIPAL_INDICADORES = {
+    # Consoles
+    "console", "playstation", "xbox", "nintendo", "switch", "ps5", "ps4",
+    # Tablets
+    "ipad", "tablet",
+    # Smartphones / marcas específicas
+    "iphone", "smartphone", "celular",
+    "galaxy", "pixel", "oneplus", "xiaomi", "redmi",
+    # Computadores e marcas específicas
+    "notebook", "laptop", "desktop", "pc", "computador",
+    "macbook", "surface",
+    # Componentes PC (quando a query é específica)
+    "rtx", "gtx", "rx", "placa de video", "placa de vídeo", "gpu",
+    "processador", "cpu", "ryzen", "core i",
+    "ssd", "hd", "memoria ram", "memória ram",
+    "fonte atx",
+    "monitor",
+    # Áudio (quando é o produto principal)
+    "caixa de som", "soundbar", "airpods",
+    # Eletrodomésticos / smart home
+    "geladeira", "tv", "televisao", "televisão",
+    "roteador", "router",
+}
+
+
+# ---------------------------------------------------------------------------
+# Utilitários de normalização (compatíveis com padronizar_texto do app.py)
+# ---------------------------------------------------------------------------
+
+def _normalizar(texto: str) -> str:
+    """Converte para ASCII lower, remove acentos e pontuação."""
+    texto = texto.lower().strip()
+    texto = unicodedata.normalize("NFKD", texto).encode("ASCII", "ignore").decode("ASCII")
+    texto = re.sub(r"(\d+)\s?(gb|tb|mb|hz|w\b)", r"\1\2", texto)  # "16 GB" → "16gb"
+    texto = re.sub(r"[^a-z0-9\s]", " ", texto)
+    texto = re.sub(r"\s+", " ", texto).strip()
+    return texto
+
+
+def _tokens(texto: str) -> list[str]:
+    return _normalizar(texto).split()
+
+
+def _construir_patterns(palavras: set) -> list[tuple[str, re.Pattern]]:
+    """Pré-compila padrões regex para um set de palavras."""
+    resultado = []
+    for p in sorted(palavras, key=len, reverse=True):  # mais longas primeiro
+        p_norm = _normalizar(p)
+        pat = re.compile(r"\b" + re.escape(p_norm) + r"\b")
+        resultado.append((p, pat))
+    return resultado
+
+
+def _contem_algum(texto_normalizado: str, palavras_ou_patterns) -> str | None:
+    """
+    Retorna a primeira palavra do conjunto encontrada no texto normalizado.
+    Aceita set de strings (normaliza on-demand) ou lista de (str, Pattern)
+    pré-compilada (mais rápido para sets estáticos).
+    """
+    if isinstance(palavras_ou_patterns, list):
+        for p, pat in palavras_ou_patterns:
+            if pat.search(texto_normalizado):
+                return p
+        return None
+    # Fallback para sets dinâmicos (qualificadores funcionais inline)
+    for p in palavras_ou_patterns:
+        p_norm = _normalizar(p)
+        if re.search(r"\b" + re.escape(p_norm) + r"\b", texto_normalizado):
+            return p
+    return None
+
+
+# Pré-compila os patterns das constantes estáticas usadas na hot-path
+_PATTERNS_ACESSORIOS = _construir_patterns(ACESSORIOS_PALAVRAS)
+_PATTERNS_QUERY_ACESSORIO = _construir_patterns(QUERY_ACESSORIO_INTENCIONAL)
+_PATTERNS_PRODUTO_PRINCIPAL = _construir_patterns(PRODUTO_PRINCIPAL_INDICADORES)
+
+
+# ---------------------------------------------------------------------------
+# Função principal
+# ---------------------------------------------------------------------------
+
+def is_produto_principal(titulo: str, query: str) -> bool:
+    """
+    Retorna True se `titulo` parece ser o produto principal da busca `query`.
+    Retorna False se parece ser acessório, variante irrelevante ou item relacionado.
+
+    Em caso de dúvida → retorna True (defensivo: melhor mostrar um acessório
+    a mais do que esconder um produto válido).
+
+    Parâmetros:
+        titulo: título do produto retornado pela loja (string)
+        query:  o que o usuário digitou na busca (string)
+
+    Retorna:
+        bool
+
+    Fluxo de decisão:
+        PASSO 1 — Query pede acessório intencional?
+            1a. Query só tem a palavra de acessório → manter tudo
+            1b. Query tem produto-pai (capa iPad, controle PS5) → manter tudo
+            1c. Query tem qualificador que NÃO é produto-pai nem especificação
+                do próprio acessório ("teclado mecânico", "headset gamer"):
+                → é periférico-produto: manter só se título começa com a
+                  palavra-produto, descartar caso contrário
+            1d. Query tem especificação do próprio acessório ("cabo USB-C",
+                "carregador 20W") → manter tudo (o acessório É o produto)
+
+        PASSO 1.5 — Título contém "para [token_query]" / "compatível com [token]"?
+            → sinal universal de acessório em e-commerce BR; descartar
+            Cobre MacBook, Galaxy, Surface e qualquer produto futuro sem
+            necessidade de manutenção de listas.
+
+        PASSO 2 — Título começa com prefixo de acessório?
+            (regex no início do título normalizado) → descartar
+
+        PASSO 3 — Título tem palavra de acessório nos primeiros 1/3 tokens?
+            → descartar
+
+        PASSO 4 — Query indica produto principal claro (iPad, PS5, RTX...)?
+            + Título tem palavra de acessório na parte principal?
+            → descartar
+
+        Padrão → manter
+    """
+    # Guarda de segurança
+    if not titulo or not query:
+        return True
+
+    titulo_norm = _normalizar(titulo)
+    query_norm = _normalizar(query)
+    tokens_query = _tokens(query_norm)
+
+    # ------------------------------------------------------------------
+    # PASSO 1: A query pede um acessório intencionalmente?
+    #
+    # Casos:
+    #   (a) "capa", "controle", "headset" → query só tem palavra de acessório
+    #   (b) "capa iPad", "controle PS5", "jogo Switch" → acessório + produto pai
+    #   (c) "cabo USB-C", "carregador 20W" → acessório + especificação técnica
+    #       do próprio acessório → manter tudo
+    #   (d) "teclado mecânico", "headset gamer" → acessório + qualificador
+    #       funcional → periférico-produto: filtrar acessórios do periférico
+    # ------------------------------------------------------------------
+    query_pede_acessorio = _contem_algum(query_norm, _PATTERNS_QUERY_ACESSORIO)
+
+    if query_pede_acessorio:
+        palavra_acess_norm = _normalizar(query_pede_acessorio)
+        tokens_qualificadores = [
+            t for t in tokens_query
+            if t not in palavra_acess_norm.split()
+            and len(t) >= 2
+        ]
+
+        # Caso (a): query só tem a palavra de acessório
+        if not tokens_qualificadores:
+            return True
+
+        qualificadores_str = " ".join(tokens_qualificadores)
+
+        # Caso (b): qualificador é um produto pai
+        if _contem_algum(qualificadores_str, _PATTERNS_PRODUTO_PRINCIPAL):
+            return True
+
+        # Distingue (c) de (d):
+        # Qualificadores FUNCIONAIS → periférico-produto (d)
+        # Qualificadores de ESPECIFICAÇÃO → acessório puro (c)
+        QUALIFICADORES_FUNCIONAIS = {
+            "mecanico", "mecanica", "gamer", "gaming", "wireless",
+            "bluetooth", "rgb", "optico", "otico", "membrana", "hibrido",
+            "ativo", "ativa", "passivo", "passiva",
+            "over", "ear", "true", "tws",
+            "tkl", "compact", "fullsize", "ergonomico", "ergonomica",
+        }
+        qualificadores_funcionais_norm = {_normalizar(q) for q in QUALIFICADORES_FUNCIONAIS}
+        e_periferico_produto = any(
+            t in qualificadores_funcionais_norm for t in tokens_qualificadores
+        )
+
+        # Caso (c): especificação do próprio acessório → manter
+        if not e_periferico_produto:
+            return True
+
+        # Caso (d): periférico-produto qualificado ("teclado mecânico", "headset gamer")
+        # O produto principal DEVE começar com a palavra-produto.
+        # Acessórios do periférico (keycaps, suporte, cabo coiled) não começam.
+        titulo_tokens = _tokens(titulo_norm)
+        palavra_produto_tokens = palavra_acess_norm.split()
+        titulo_comeca_com_produto = (
+            titulo_tokens[:len(palavra_produto_tokens)] == palavra_produto_tokens
+        )
+        return titulo_comeca_com_produto  # True = produto, False = acessório do produto
+
+    # ------------------------------------------------------------------
+    # PASSO 1.5: "Para [...] [token_query]" / "compatível com [token]" / "p/ [token]"
+    # Sinal universal de acessório em e-commerce brasileiro.
+    # Fonte: ML treina vendedores a usar "para X" / "compatível com X" para acessórios.
+    # Funciona para qualquer produto sem manutenção de listas:
+    #   "Sleeve para MacBook Air", "Hub para MacBook Pro",
+    #   "Para Laptop PC MacBook PS4", "para iPhone 16, iPad e MacBook Air",
+    #   "Capa para Galaxy S24", "compatível com MacBooks"
+    # Nota: verifica token e plural simples (macbook → macbooks)
+    # ------------------------------------------------------------------
+    _m_para = re.search(r'\bpara\b', titulo_norm)
+    for qt in tokens_query:
+        if len(qt) < 3:
+            continue  # ignora artigos, prep., números curtos ("de", "15", "m2")
+        # Padrão de match: token ou plural (macbook → macbooks)
+        _qt_pat = r'\b(?:' + re.escape(qt) + r'|' + re.escape(qt) + r's)\b'
+        # "para [qualquer coisa] macbook" — token da query após qualquer "para"
+        if _m_para and re.search(_qt_pat, titulo_norm[_m_para.start():]):
+            return False
+        # "p/ macbook", "p/iphone"
+        if re.search(r'\bp\s*/\s*' + re.escape(qt) + r'\b', titulo_norm):
+            return False
+        # "compatível com macbook", "compatible macbook", "compatíveis macbooks"
+        if re.search(r'\bcompat[a-z]*\b(?:\s+com)?\s+' + _qt_pat, titulo_norm):
+            return False
+
+    # ------------------------------------------------------------------
+    # PASSO 2: Título começa com prefixo claro de acessório?
+    # Ex.: "Capa para iPad...", "Suporte Mesa...", "Carregador USB-C..."
+    # ------------------------------------------------------------------
+    for padrao in PREFIXOS_ACESSORIO:
+        if re.search(padrao, titulo_norm):
+            return False
+
+    # ------------------------------------------------------------------
+    # PASSO 3: Título tem palavra de acessório nos primeiros 1/3 tokens?
+    # Cobre: "Película de Vidro iPad Air 5" (prefixo não captura exato)
+    # ------------------------------------------------------------------
+    tokens_titulo = _tokens(titulo_norm)
+    n_checar = max(3, len(tokens_titulo) // 3)
+    prefixo_titulo = " ".join(tokens_titulo[:n_checar])
+    if _contem_algum(prefixo_titulo, _PATTERNS_ACESSORIOS):
+        return False
+
+    # ------------------------------------------------------------------
+    # PASSO 3b: Console como sufixo/plataforma — padrão de jogo ou acessório
+    # "Resident Evil 4 - PS5", "Spider-Man PS5 Versão Europeia", "God of War Xbox"
+    # O identificador do console aparece depois de " - " no título ORIGINAL,
+    # indicando que é produto PARA a plataforma, não a plataforma em si.
+    # Nota: _normalizar remove traços; por isso usamos `titulo` (original) aqui.
+    # Exceção: título também contém palavras de hardware (console, slim, tb...)
+    # ------------------------------------------------------------------
+    # Padrão "para console [query]" / "para o console [query]" → acessório
+    for qt in tokens_query:
+        if re.search(r'\bpara\s+(?:o\s+)?console\s+' + re.escape(qt), titulo_norm):
+            return False
+
+    _CONSOLES_RAW = [
+        (r'\bPS5\b', 'ps5'), (r'\bPS4\b', 'ps4'), (r'\bPS3\b', 'ps3'),
+        (r'\bXbox\b', 'xbox'), (r'\bSwitch\b', 'switch'),
+    ]
+    _HW_WORDS = r'\b(console|slim|digital|825gb|1tb|2tb|cfr|cfi|heg|hdh)\b'
+    for console_pat, console_key in _CONSOLES_RAW:
+        if console_key in query_norm:
+            # Padrão: "Algo - PS5" ou "Algo - PS5 Versão Europeia" no título original
+            if re.search(r'\s-\s+' + console_pat, titulo, re.IGNORECASE):
+                if not re.search(_HW_WORDS, titulo_norm):
+                    return False
+
+    # ------------------------------------------------------------------
+    # PASSO 4: Query indica produto principal claro E título tem acessório?
+    # Cobre keyword stuffing da Shopee e títulos mistos.
+    # Só aplica quando a query sinaliza claramente o produto principal
+    # (iPad, PS5, RTX 4070...) para não filtrar demais em queries genéricas.
+    # ------------------------------------------------------------------
+    if _contem_algum(query_norm, _PATTERNS_PRODUTO_PRINCIPAL):
+        partes = re.split(r"[,()\[\]]", titulo_norm)
+        parte_principal = partes[0].strip()
+        palavra_acc = _contem_algum(parte_principal, _PATTERNS_ACESSORIOS)
+        if palavra_acc:
+            palavra_acc_norm = _normalizar(palavra_acc)
+            # Excluir: "para [atividade]" descreve o PROPÓSITO do produto principal,
+            # não indica que é um acessório físico.
+            # ✓ "Console para Jogos 4K Sony"  — "para jogos" = propósito do console
+            # ✗ "Pano de Limpeza Capa Para Teclado" — "para teclado" = acessório do teclado
+            _PALAVRAS_ATIVIDADE = {
+                "jogo", "jogos", "game", "games", "uso", "trabalho",
+                "escritorio", "estudio", "edicao", "gamers", "criadores",
+                "streaming", "multimidia",
+            }
+            if (re.search(r"\bpara\s+" + re.escape(palavra_acc_norm), parte_principal)
+                    and palavra_acc_norm in _PALAVRAS_ATIVIDADE):
+                pass  # não filtrar — é propósito do produto
+            # Excluir: "capa inclusa/incluída" e "com capa" indicam bundle, não capa como produto
+            elif palavra_acc_norm == "capa" and re.search(
+                r"\bcapa\s+inclu|\bcom\s+capa\b|\bacompanha\s+capa\b", parte_principal
+            ):
+                pass  # não filtrar — é nota de bundle
+            else:
+                return False
+
+    # ------------------------------------------------------------------
+    # Padrão: produto parece legítimo → manter
+    # ------------------------------------------------------------------
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Constante e função para filtro de produtos NOVOS vs. USADOS
+# ---------------------------------------------------------------------------
+
+# Palavras que, na QUERY, indicam que o usuário QUER produtos usados/recondicionados.
+# Quando presentes, is_produto_novo() retorna True (não filtra nada).
+QUERY_QUER_USADO = {
+    "usado", "usada", "usados",
+    "recondicionado", "recondicionada",
+    "seminovo", "semi-novo", "remanufaturado",
+    "vitrine", "refurbished",
+}
+
+_QUERY_QUER_USADO_NORM = {_normalizar(p) for p in QUERY_QUER_USADO}
+
+
+def is_produto_novo(titulo: str, query: str) -> bool:
+    """
+    Retorna True se o produto parece ser NOVO (não usado/recondicionado).
+    Retorna False se o título indica produto usado, recondicionado ou seminovo.
+
+    Exceção: se a query explicitamente pede produto usado/recondicionado,
+    retorna True (não filtra — usuário sabe o que quer).
+
+    Sinais de produto USADO/RECONDICIONADO detectados:
+        1. Título começa com "Usado:" (padrão Mercado Livre)
+        2. Palavras explícitas: recondicionado, seminovo, vitrine, etc.
+        3. "Muito Bom" como frase (condição ML para item usado)
+        4. " - Bom" / " - Excelente" com traço no título original
+           (padrão ML: "iPhone 14 128GB - Excelente", "iPhone 14 - Bom (Recondicionado)")
+        5. "Bom" ou "Excelente" como último token (sem traço)
+           (padrão ML alternativo: "Apple iPhone 14 128GB Excelente")
+    """
+    if not titulo or not query:
+        return True
+
+    titulo_norm = _normalizar(titulo)
+    query_norm = _normalizar(query)
+
+    # Usuário quer produto usado/recondicionado → não filtrar
+    if any(t in _QUERY_QUER_USADO_NORM for t in query_norm.split()):
+        return True
+
+    # 1. "Usado" em qualquer posição do título (normalizado ou em parênteses no original)
+    # Captura: "Usado: Apple iPhone...", "Apple iPhone 15 (Usado)", "Apple iPhone - Usado"
+    if re.search(r'\busad[ao]s?\b', titulo_norm):
+        return False
+
+    # 2. Palavras explícitas de condição usada/recondicionada
+    # Inclui "condicionado" (sellers às vezes omitem o "re-") e "(Recondicionado)" com parênteses.
+    # Nota: "ar condicionado" é produto legítimo — detectado via lookbehind no título original.
+    if re.search(
+        r'\b(?:recondicionad[ao]s?|condicionad[ao]s?|seminov[ao]s?|semi[\s-]nov[ao]s?'
+        r'|vitrine|remanufaturad[ao]s?|refurbished)\b',
+        titulo_norm,
+    ):
+        # Falso positivo: "Ar Condicionado" é produto legítimo — não filtrar
+        if re.search(r'\bar\s+condicionad', titulo_norm):
+            pass  # manter — é aparelho de ar condicionado
+        else:
+            return False
+
+    # 2b. Padrão explícito com parênteses no título ORIGINAL (antes da normalização)
+    # Captura: "(Usado)", "(Recondicionado)", "(Condicionado)", "(Muito Bom)", "(Excelente)", "(Bom)"
+    if re.search(
+        r'\((?:Usado|Usada|Recondicionado|Condicionado|Muito\s+Bom|Excelente|Bom)\)',
+        titulo, re.IGNORECASE,
+    ):
+        return False
+
+    # 3. "Muito Bom" como frase — condição ML para item usado, grau "Muito Bom"
+    # (distinto de "muito boa câmera", que usa gênero feminino)
+    if re.search(r'\bmuito\s+bom\b', titulo_norm):
+        return False
+
+    # 4. " - Bom" / " - Excelente" com traço no título ORIGINAL
+    # Padrão ML: "Apple iPhone 14 128GB - Bom" / "iPhone 14 - Excelente (Recond.)"
+    # Usa `titulo` original (não normalizado) pois o normalizador remove traços.
+    if re.search(r'\s-\s(?:Bom|Excelente)\b', titulo, re.IGNORECASE):
+        return False
+
+    # 5. "bom" ou "excelente" como ÚLTIMO token — sem traço (padrão alternativo ML)
+    # "Apple iPhone 14 128GB Excelente" → claramente item usado sem "Usado:" prefix
+    tokens_titulo = titulo_norm.split()
+    if tokens_titulo and tokens_titulo[-1] in {'bom', 'excelente'}:
+        return False
+
+    return True
+# --- end filtro_produto_principal ---
 
 # Cache do buildId da Magalu (invalidado automaticamente em caso de 404)
 _MAGALU_BUILD_ID = None
@@ -1758,6 +2267,215 @@ HTML_TEMPLATE = '''
             background: var(--primary-color);
             color: white;
         }
+        .toast.success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        /* === Alert Section (modals) === */
+        .alert-section {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        .alert-section-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+        .alert-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.625rem 0.75rem;
+            margin-bottom: 0.375rem;
+            border-radius: var(--radius-lg);
+            cursor: pointer;
+            transition: background-color 0.2s;
+            user-select: none;
+        }
+        .alert-toggle:hover {
+            background-color: var(--background);
+        }
+        .alert-toggle-text {
+            font-size: 0.875rem;
+            color: var(--text-primary);
+            flex: 1;
+            margin-right: 0.75rem;
+        }
+        .alert-toggle input[type="checkbox"] {
+            display: none;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background-color: var(--border);
+            border-radius: 12px;
+            transition: background-color 0.25s ease;
+            flex-shrink: 0;
+        }
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 18px;
+            height: 18px;
+            background-color: var(--text-secondary);
+            border-radius: 50%;
+            transition: transform 0.25s ease, background-color 0.25s ease;
+        }
+        .alert-toggle input:checked + .toggle-switch {
+            background-color: var(--accent-color);
+        }
+        .alert-toggle input:checked + .toggle-switch::after {
+            transform: translateX(20px);
+            background-color: #fff;
+        }
+        .alert-target-field {
+            max-height: 0;
+            overflow: hidden;
+            opacity: 0;
+            transition: max-height 0.3s ease, opacity 0.25s ease, margin 0.3s ease;
+            margin-top: 0;
+            padding: 0 0.75rem;
+        }
+        .alert-target-field.visible {
+            max-height: 80px;
+            opacity: 1;
+            margin-top: 0.5rem;
+        }
+        .alert-target-field .form-input {
+            margin-top: 0.25rem;
+        }
+
+        /* === Price Alert Toast === */
+        .price-toast-container {
+            position: fixed;
+            top: 5rem;
+            right: 1.25rem;
+            z-index: 10000;
+            pointer-events: none;
+        }
+        .price-toast {
+            pointer-events: auto;
+            width: 360px;
+            max-width: calc(100vw - 2rem);
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-xl);
+            padding: 1rem;
+            transform: translateX(calc(100% + 30px));
+            opacity: 0;
+            animation: priceToastIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            position: relative;
+            overflow: hidden;
+        }
+        .price-toast.dismissing {
+            animation: priceToastOut 0.3s ease-in forwards;
+        }
+        @keyframes priceToastIn {
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes priceToastOut {
+            to { transform: translateX(calc(100% + 30px)); opacity: 0; }
+        }
+        .price-toast-close {
+            position: absolute;
+            top: 0.625rem;
+            right: 0.625rem;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            line-height: 1;
+            transition: color 0.15s, background 0.15s;
+        }
+        .price-toast-close:hover {
+            color: var(--text-primary);
+            background: var(--background);
+        }
+        .price-toast-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            padding-right: 1.5rem;
+        }
+        .price-toast-store {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .price-toast-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(34, 197, 94, 0.15);
+            color: var(--success-color);
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 20px;
+        }
+        .price-toast-badge.target {
+            background: rgba(99, 102, 241, 0.15);
+            color: var(--accent-color);
+        }
+        .price-toast-product {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.375rem;
+            line-height: 1.3;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+        .price-toast-price-row {
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .price-toast-price {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--success-color);
+        }
+        .price-toast-installment {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+        .price-toast-cta {
+            display: block;
+            width: 100%;
+            padding: 0.625rem;
+            background: var(--accent-color);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-lg);
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            text-decoration: none;
+            transition: filter 0.15s;
+        }
+        .price-toast-cta:hover {
+            filter: brightness(1.1);
+        }
 
         /* Theme Switch Pill */
         .theme-switch {
@@ -1964,9 +2682,15 @@ HTML_TEMPLATE = '''
                 <label class="form-label">Nome do produto *</label>
                 <input type="text" id="watch-nome" class="form-input" placeholder="Ex: RTX 5060 Ti 16GB" autocomplete="off" />
             </div>
-            <div class="form-group" style="margin-top:1rem">
-                <label class="form-label">Preço máximo (R$)</label>
-                <input type="number" id="watch-valor-max" class="form-input" placeholder="Sem limite" min="0" step="0.01" />
+            <div style="display:flex;gap:0.75rem;margin-top:1rem">
+                <div class="form-group" style="flex:1">
+                    <label class="form-label">Preço mínimo (R$)</label>
+                    <input type="number" id="watch-valor-min" class="form-input" placeholder="Sem limite" min="0" step="0.01" />
+                </div>
+                <div class="form-group" style="flex:1">
+                    <label class="form-label">Preço máximo (R$)</label>
+                    <input type="number" id="watch-valor-max" class="form-input" placeholder="Sem limite" min="0" step="0.01" />
+                </div>
             </div>
             <div class="modal-stores" style="margin-top:1rem">
                 <label class="form-label" style="display:block;margin-bottom:0.5rem">Lojas</label>
@@ -1979,6 +2703,23 @@ HTML_TEMPLATE = '''
                     <div class="store-option"><input type="checkbox" id="wl-amazon" class="store-checkbox wl-store-checkbox" value="amazon" checked><label for="wl-amazon" class="store-label"><img src="https://www.google.com/s2/favicons?domain=amazon.com.br&sz=32" class="store-label-logo" alt=""> Amazon</label></div>
                     <div class="store-option"><input type="checkbox" id="wl-shopee" class="store-checkbox wl-store-checkbox" value="shopee" checked><label for="wl-shopee" class="store-label"><img src="https://www.google.com/s2/favicons?domain=shopee.com.br&sz=32" class="store-label-logo" alt=""> Shopee</label></div>
                     <div class="store-option"><input type="checkbox" id="wl-casasbahia" class="store-checkbox wl-store-checkbox" value="casasbahia" checked><label for="wl-casasbahia" class="store-label"><img src="https://www.google.com/s2/favicons?domain=casasbahia.com.br&sz=32" class="store-label-logo" alt=""> Casas Bahia</label></div>
+                </div>
+            </div>
+            <div class="alert-section">
+                <div class="alert-section-title">Alertas de Preco</div>
+                <label class="alert-toggle" for="watch-notify-lower">
+                    <span class="alert-toggle-text">Notificar quando encontrar preco mais baixo</span>
+                    <input type="checkbox" id="watch-notify-lower" checked>
+                    <span class="toggle-switch"></span>
+                </label>
+                <label class="alert-toggle" for="watch-notify-target">
+                    <span class="alert-toggle-text">Notificar quando atingir valor alvo</span>
+                    <input type="checkbox" id="watch-notify-target">
+                    <span class="toggle-switch"></span>
+                </label>
+                <div class="alert-target-field" id="watch-target-field">
+                    <label class="form-label" for="watch-target-price">Valor alvo (R$)</label>
+                    <input type="number" id="watch-target-price" class="form-input" placeholder="Ex: 2499.00" min="0" step="0.01">
                 </div>
             </div>
             <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
@@ -1997,13 +2738,15 @@ HTML_TEMPLATE = '''
                 <label class="form-label">Nome do produto *</label>
                 <input type="text" id="edit-watch-nome" class="form-input" placeholder="Ex: RTX 5060 Ti 16GB" autocomplete="off" />
             </div>
-            <div class="form-group" style="margin-top:1rem">
-                <label class="form-label">Valor Mínimo (R$)</label>
-                <input type="number" id="edit-watch-valor-min" class="form-input" placeholder="Sem limite mínimo" min="0" step="0.01" />
-            </div>
-            <div class="form-group" style="margin-top:1rem">
-                <label class="form-label">Valor Máximo (R$)</label>
-                <input type="number" id="edit-watch-valor-max" class="form-input" placeholder="Sem limite máximo" min="0" step="0.01" />
+            <div style="display:flex;gap:0.75rem;margin-top:1rem">
+                <div class="form-group" style="flex:1">
+                    <label class="form-label">Preço mínimo (R$)</label>
+                    <input type="number" id="edit-watch-valor-min" class="form-input" placeholder="Sem limite" min="0" step="0.01" />
+                </div>
+                <div class="form-group" style="flex:1">
+                    <label class="form-label">Preço máximo (R$)</label>
+                    <input type="number" id="edit-watch-valor-max" class="form-input" placeholder="Sem limite" min="0" step="0.01" />
+                </div>
             </div>
             <div class="modal-stores" style="margin-top:1rem">
                 <label class="form-label" style="display:block;margin-bottom:0.5rem">Lojas</label>
@@ -2016,6 +2759,23 @@ HTML_TEMPLATE = '''
                     <div class="store-option"><input type="checkbox" id="edit-wl-amazon" class="store-checkbox" value="amazon"><label for="edit-wl-amazon" class="store-label"><img src="https://www.google.com/s2/favicons?domain=amazon.com.br&sz=32" class="store-label-logo" alt=""> Amazon</label></div>
                     <div class="store-option"><input type="checkbox" id="edit-wl-shopee" class="store-checkbox" value="shopee"><label for="edit-wl-shopee" class="store-label"><img src="https://www.google.com/s2/favicons?domain=shopee.com.br&sz=32" class="store-label-logo" alt=""> Shopee</label></div>
                     <div class="store-option"><input type="checkbox" id="edit-wl-casasbahia" class="store-checkbox" value="casasbahia"><label for="edit-wl-casasbahia" class="store-label"><img src="https://www.google.com/s2/favicons?domain=casasbahia.com.br&sz=32" class="store-label-logo" alt=""> Casas Bahia</label></div>
+                </div>
+            </div>
+            <div class="alert-section">
+                <div class="alert-section-title">Alertas de Preco</div>
+                <label class="alert-toggle" for="edit-watch-notify-lower">
+                    <span class="alert-toggle-text">Notificar quando encontrar preco mais baixo</span>
+                    <input type="checkbox" id="edit-watch-notify-lower">
+                    <span class="toggle-switch"></span>
+                </label>
+                <label class="alert-toggle" for="edit-watch-notify-target">
+                    <span class="alert-toggle-text">Notificar quando atingir valor alvo</span>
+                    <input type="checkbox" id="edit-watch-notify-target">
+                    <span class="toggle-switch"></span>
+                </label>
+                <div class="alert-target-field" id="edit-watch-target-field">
+                    <label class="form-label" for="edit-watch-target-price">Valor alvo (R$)</label>
+                    <input type="number" id="edit-watch-target-price" class="form-input" placeholder="Ex: 2499.00" min="0" step="0.01">
                 </div>
             </div>
             <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
@@ -2901,7 +3661,6 @@ HTML_TEMPLATE = '''
             if (idx === -1) return;
             const item = watchlistData[idx];
             if (data.melhor_preco !== undefined) {
-                // Append to local history before overwriting
                 const oldBest = item.melhor_preco;
                 item.melhor_preco = data.melhor_preco;
                 if (data.melhor_preco && typeof data.melhor_preco.preco === 'number') {
@@ -2911,9 +3670,10 @@ HTML_TEMPLATE = '''
                         preco: data.melhor_preco.preco,
                         loja: data.melhor_preco.loja || ''
                     });
-                    // Keep last 20 entries
                     item.historico = hist.slice(-20);
                 }
+                // Fire price alerts
+                _checkPriceAlerts(item, oldBest, data.melhor_preco, data.trend);
             }
             item.ultima_busca = new Date().toISOString();
             item._stale = false;
@@ -3412,15 +4172,231 @@ HTML_TEMPLATE = '''
             .catch(() => showNotification('Erro ao adicionar.', 'error'));
         }
 
+        // ================================================================
+        // PRICE TOAST NOTIFICATION SYSTEM
+        // ================================================================
+        const PriceToast = (() => {
+            let container = null;
+            let currentToast = null;
+
+            function getContainer() {
+                if (!container) {
+                    container = document.createElement('div');
+                    container.className = 'price-toast-container';
+                    document.body.appendChild(container);
+                }
+                return container;
+            }
+
+            function fmtPrice(v) {
+                return parseFloat(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            }
+
+            function dismiss(el) {
+                if (el.dataset.dismissed) return;
+                el.dataset.dismissed = '1';
+                if (currentToast === el) currentToast = null;
+                el.classList.add('dismissing');
+                el.addEventListener('animationend', () => el.remove(), { once: true });
+            }
+
+            function show(data) {
+                // Close previous toast before showing new one
+                if (currentToast) dismiss(currentToast);
+
+                const toast = document.createElement('div');
+                toast.className = 'price-toast';
+
+                const badgeClass = data.type === 'target' ? 'price-toast-badge target' : 'price-toast-badge';
+                const badgeText = data.type === 'target'
+                    ? 'Valor alvo atingido!'
+                    : `&#9660; ${fmtPrice(data.savings)} mais barato`;
+
+                toast.innerHTML = `
+                    <button class="price-toast-close" aria-label="Fechar">&times;</button>
+                    <div class="price-toast-header">
+                        <span class="price-toast-store">${escHtml(data.store)}</span>
+                        <span class="${badgeClass}">
+                            ${badgeText}
+                        </span>
+                    </div>
+                    <div class="price-toast-product">${escHtml(data.product)}</div>
+                    <div class="price-toast-price-row">
+                        <span class="price-toast-price">${fmtPrice(data.price)}</span>
+                        ${data.installment ? `<span class="price-toast-installment">${escHtml(data.installment)}</span>` : ''}
+                    </div>
+                    ${data.url ? `<a href="${escHtml(data.url)}" target="_blank" rel="noopener" class="price-toast-cta">Ver oferta</a>` : ''}
+                `;
+
+                toast.querySelector('.price-toast-close').addEventListener('click', () => dismiss(toast));
+
+                currentToast = toast;
+                getContainer().appendChild(toast);
+            }
+
+            return { show };
+        })();
+
+        // ================================================================
+        // BROWSER TAB ALERT
+        // ================================================================
+        const TabAlert = (() => {
+            let intervalId = null;
+            let originalTitle = document.title;
+            let isOriginal = true;
+
+            function start(message) {
+                if (intervalId) return;
+                originalTitle = document.title;
+                message = message || String.fromCodePoint(0x1F514) + ' Queda de preco!';
+                intervalId = setInterval(() => {
+                    document.title = isOriginal ? message : originalTitle;
+                    isOriginal = !isOriginal;
+                }, 1000);
+                window.addEventListener('focus', stop, { once: true });
+            }
+
+            function stop() {
+                if (!intervalId) return;
+                clearInterval(intervalId);
+                intervalId = null;
+                document.title = originalTitle;
+                isOriginal = true;
+            }
+
+            return { start, stop };
+        })();
+
+        // Track which items already triggered target notification this session
+        const _notifiedTargets = new Set();
+
+        // ================================================================
+        // OS PUSH NOTIFICATION (Web Notifications API)
+        // ================================================================
+        const OSNotify = (() => {
+            let _permissionRequested = false;
+
+            function requestPermission() {
+                if (!('Notification' in window)) return;
+                if (Notification.permission === 'granted' || Notification.permission === 'denied') return;
+                if (_permissionRequested) return;
+                _permissionRequested = true;
+                Notification.requestPermission();
+            }
+
+            function show(data) {
+                if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+                const fmtPrice = v => parseFloat(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+                let title, body;
+                if (data.type === 'target') {
+                    title = 'TechOfertas — Valor alvo atingido!';
+                    body = `${data.product}\n${fmtPrice(data.price)} na ${data.store}`;
+                } else {
+                    title = `TechOfertas — Queda de preco! ${fmtPrice(data.savings)} mais barato`;
+                    body = `${data.product}\n${fmtPrice(data.price)} na ${data.store}`;
+                }
+
+                const n = new Notification(title, {
+                    body,
+                    icon: '/favicon.ico',
+                    tag: 'techofertas-price-alert',  // replaces previous notification of same tag
+                    renotify: true,
+                });
+
+                if (data.url) {
+                    n.onclick = () => { window.open(data.url, '_blank', 'noopener'); n.close(); };
+                }
+            }
+
+            return { requestPermission, show };
+        })();
+
+        function _fmtInstallment(p) {
+            if (!p || !p.parcelas) return null;
+            return `${p.parcelas}x R$ ${p.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2})}${p.sem_juros ? ' sem juros' : ''}`;
+        }
+
+        // Check and fire price alerts after an update
+        function _checkPriceAlerts(item, oldBest, newBest, trend) {
+            if (!newBest || typeof newBest.preco !== 'number') return;
+            if (item.notificar_preco_baixo === false && !item.notificar_valor_alvo) return;
+
+            // 1. No previous price yet — skip, wait for next update to compare
+            if (!oldBest) return;
+
+            // 2. Price dropped
+            if (item.notificar_preco_baixo !== false && trend === 'down' && oldBest) {
+                const savings = oldBest.preco - newBest.preco;
+                if (savings > 0.01) {
+                    const d = {
+                        product: newBest.nome || item.query,
+                        price: newBest.preco,
+                        installment: _fmtInstallment(newBest.parcelamento),
+                        store: newBest.loja || '',
+                        savings: savings,
+                        url: newBest.link || '',
+                        type: 'drop'
+                    };
+                    PriceToast.show(d);
+                    OSNotify.show(d);
+                    TabAlert.start();
+                }
+            }
+
+            // 3. Target price reached
+            const target = item.notificar_valor_alvo;
+            if (target && newBest.preco <= target && !_notifiedTargets.has(item.id)) {
+                _notifiedTargets.add(item.id);
+                const d = {
+                    product: newBest.nome || item.query,
+                    price: newBest.preco,
+                    installment: _fmtInstallment(newBest.parcelamento),
+                    store: newBest.loja || '',
+                    savings: target - newBest.preco,
+                    url: newBest.link || '',
+                    type: 'target'
+                };
+                PriceToast.show(d);
+                OSNotify.show(d);
+                TabAlert.start();
+            }
+        }
+
+        // ================================================================
+        // ALERT TOGGLE HELPERS
+        // ================================================================
+        function initAlertToggles(prefix) {
+            const cb = document.getElementById(prefix + 'notify-target');
+            const field = document.getElementById(prefix + 'target-field');
+            if (!cb || !field) return;
+            const sync = () => field.classList.toggle('visible', cb.checked);
+            cb.addEventListener('change', sync);
+            sync();
+        }
+
         function showAddWatchModal() {
+            OSNotify.requestPermission();
             document.getElementById('add-watch-modal').style.display = 'flex';
+            // Reset alert toggles to defaults
+            document.getElementById('watch-notify-lower').checked = true;
+            document.getElementById('watch-notify-target').checked = false;
+            document.getElementById('watch-target-price').value = '';
+            initAlertToggles('watch-');
             setTimeout(() => document.getElementById('watch-nome').focus(), 50);
         }
 
         function closeAddWatchModal() {
             document.getElementById('add-watch-modal').style.display = 'none';
             document.getElementById('watch-nome').value = '';
+            document.getElementById('watch-valor-min').value = '';
             document.getElementById('watch-valor-max').value = '';
+            document.getElementById('watch-notify-lower').checked = true;
+            document.getElementById('watch-notify-target').checked = false;
+            document.getElementById('watch-target-price').value = '';
+            const f = document.getElementById('watch-target-field');
+            if (f) f.classList.remove('visible');
         }
 
         let _editingWatchId = null;
@@ -3432,11 +4408,15 @@ HTML_TEMPLATE = '''
             document.getElementById('edit-watch-nome').value = item.query || '';
             document.getElementById('edit-watch-valor-min').value = item.valor_minimo > 0 ? item.valor_minimo : '';
             document.getElementById('edit-watch-valor-max').value = item.valor_maximo != null ? item.valor_maximo : '';
+            document.getElementById('edit-watch-notify-lower').checked = item.notificar_preco_baixo !== false;
+            document.getElementById('edit-watch-notify-target').checked = !!item.notificar_valor_alvo;
+            document.getElementById('edit-watch-target-price').value = item.notificar_valor_alvo || '';
             const lojas = item.lojas || {};
             ['kabum','pichau','terabyte','mercadolivre','magalu','amazon','shopee','casasbahia'].forEach(s => {
                 const cb = document.getElementById(`edit-wl-${s}`);
                 if (cb) cb.checked = lojas[s] !== false;
             });
+            initAlertToggles('edit-watch-');
             document.getElementById('edit-watch-modal').style.display = 'flex';
             setTimeout(() => document.getElementById('edit-watch-nome').focus(), 50);
         }
@@ -3451,6 +4431,9 @@ HTML_TEMPLATE = '''
             if (!nome) { showNotification('Informe o nome do produto.', 'error'); return; }
             const valorMin = document.getElementById('edit-watch-valor-min').value;
             const valorMax = document.getElementById('edit-watch-valor-max').value;
+            const notifyLower = document.getElementById('edit-watch-notify-lower').checked;
+            const notifyTarget = document.getElementById('edit-watch-notify-target').checked;
+            const targetPrice = document.getElementById('edit-watch-target-price').value;
             const lojas = {};
             ['kabum','pichau','terabyte','mercadolivre','magalu','amazon','shopee','casasbahia'].forEach(s => {
                 lojas[s] = document.getElementById(`edit-wl-${s}`).checked;
@@ -3463,7 +4446,9 @@ HTML_TEMPLATE = '''
                     query: nome,
                     valor_minimo: valorMin === '' ? 0 : parseFloat(valorMin),
                     valor_maximo: valorMax === '' ? null : parseFloat(valorMax),
-                    lojas
+                    lojas,
+                    notificar_preco_baixo: notifyLower,
+                    notificar_valor_alvo: notifyTarget && targetPrice ? parseFloat(targetPrice) : null
                 })
             })
             .then(r => r.json())
@@ -3489,11 +4474,21 @@ HTML_TEMPLATE = '''
                 const cb = document.getElementById(`wl-${s}`);
                 lojas[s] = cb ? cb.checked : true;
             });
+            const vminRaw = document.getElementById('watch-valor-min').value;
             const vmRaw = document.getElementById('watch-valor-max').value;
+            const notifyLower = document.getElementById('watch-notify-lower').checked;
+            const notifyTarget = document.getElementById('watch-notify-target').checked;
+            const targetPrice = document.getElementById('watch-target-price').value;
             fetch('/watchlist', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({query, lojas, valor_maximo: vmRaw ? parseFloat(vmRaw) : null}),
+                body: JSON.stringify({
+                    query, lojas,
+                    valor_minimo: vminRaw ? parseFloat(vminRaw) : 0,
+                    valor_maximo: vmRaw ? parseFloat(vmRaw) : null,
+                    notificar_preco_baixo: notifyLower,
+                    notificar_valor_alvo: notifyTarget && targetPrice ? parseFloat(targetPrice) : null
+                }),
             })
             .then(r => r.json())
             .then(data => {
@@ -5080,6 +6075,8 @@ def wl_add():
         'lojas': dados.get('lojas', {'kabum': True, 'pichau': True, 'terabyte': True, 'mercadolivre': True, 'magalu': True, 'amazon': True, 'shopee': True, 'casasbahia': True}),
         'valor_minimo': dados.get('valor_minimo', 0),
         'valor_maximo': dados.get('valor_maximo', None),
+        'notificar_preco_baixo': dados.get('notificar_preco_baixo', True),
+        'notificar_valor_alvo': dados.get('notificar_valor_alvo', None),
         'adicionado_em': datetime.now(timezone.utc).isoformat(),
         'ultima_busca': None,
         'melhor_preco': None,
@@ -5104,6 +6101,8 @@ def wl_edit(item_id):
     item['valor_minimo'] = dados.get('valor_minimo', 0)
     item['valor_maximo'] = dados.get('valor_maximo', None)
     item['lojas'] = dados.get('lojas', item.get('lojas', {}))
+    item['notificar_preco_baixo'] = dados.get('notificar_preco_baixo', item.get('notificar_preco_baixo', True))
+    item['notificar_valor_alvo'] = dados.get('notificar_valor_alvo', item.get('notificar_valor_alvo', None))
     _wl_save(wl)
     return jsonify({'ok': True, 'item': item})
 
