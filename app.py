@@ -4102,19 +4102,9 @@ HTML_TEMPLATE = '''
             const item = watchlistData.find(i => i.id === id);
             if (!item) return;
 
-            if (item.link) {
-                // Link-based: background update — pode coexistir com outros simples
-                _updatingIds.add(id);
-                _updateWatchSimple(id, item);
-            } else {
-                // Query-based: ocupa o watchUpdateSource global
-                // Se updateAll está rodando, cancela e inicia o item específico
-                if (watchUpdateSource) { watchUpdateSource.close(); watchUpdateSource = null; }
-                _updateAllRunning = false;
-                wlCacheClear(id);
-                _updatingIds.add(id);
-                _updateWatchStream(id, item);
-            }
+            // Sempre atualiza em background — sem mudar de aba nem abrir resultados na tela
+            _updatingIds.add(id);
+            _updateWatchSimple(id, item);
         }
 
         function _updateWatchSimple(id, item) {
@@ -4135,6 +4125,7 @@ HTML_TEMPLATE = '''
                     if (data.type === 'error') {
                         showNotification(data.mensagem || 'Erro ao atualizar.', 'error');
                     } else {
+                        if (data.todos_resultados) wlCacheSave(id, data.todos_resultados);
                         _applyUpdateResult(id, data);
                         renderWatchlist();
                     }
