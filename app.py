@@ -4332,8 +4332,20 @@ def buscar_mercadolivre(produto, valor_minimo, valor_maximo):
                 continue
             if not _ml_nome_bate_query(produto, nome):
                 continue
+            if not is_produto_principal(nome, produto):
+                continue
 
             offers = item.get('offers') or {}
+
+            # Filtrar usado/recondicionado via campo itemCondition do schema.org
+            # Valores: "https://schema.org/NewCondition", "UsedCondition", "RefurbishedCondition"
+            item_condition = (offers.get('itemCondition') or '').lower()
+            if any(c in item_condition for c in ('used', 'refurbished')):
+                continue
+            # Fallback: filtro textual no nome (captura "(Recondicionado)", "Usado:", etc.)
+            if not is_produto_novo(nome, produto):
+                continue
+
             preco_valor = offers.get('price')
             if preco_valor is None:
                 continue
