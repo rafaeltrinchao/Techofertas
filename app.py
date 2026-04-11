@@ -551,6 +551,79 @@ def serve_logo():
 # ---------------------------------------------------------------------------
 WATCHLIST_PATH = _DATA_DIR / 'watchlist.json'
 
+# ---------------------------------------------------------------------------
+# Telegram — configuração e envio
+# ---------------------------------------------------------------------------
+TELEGRAM_CONFIG_PATH = _DATA_DIR / 'telegram_config.json'
+
+
+def _tg_load():
+    if TELEGRAM_CONFIG_PATH.exists():
+        try:
+            return json.loads(TELEGRAM_CONFIG_PATH.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+    return {'token': '', 'chat_id': ''}
+
+
+def _tg_save(cfg):
+    TELEGRAM_CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding='utf-8')
+
+
+def _tg_send(token, chat_id, text):
+    """Envia mensagem via Telegram Bot API. Retorna (ok, erro)."""
+    if not token or not chat_id:
+        return False, 'Token ou Chat ID não configurado.'
+    url = f'https://api.telegram.org/bot{token}/sendMessage'
+    payload = json.dumps({'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'}).encode()
+    req = urllib.request.Request(url, data=payload, headers={'Content-Type': 'application/json'}, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+            return data.get('ok', False), None
+    except Exception as e:
+        return False, str(e)
+
+
+def _tg_notify_price(item, old_best, new_best, trend):
+    """Envia alerta de preço via Telegram se configurado e habilitado para o item."""
+    if not new_best or not isinstance(new_best.get('preco'), (int, float)):
+        return
+    cfg = _tg_load()
+    if not cfg.get('token') or not cfg.get('chat_id'):
+        return
+
+    def fmt(v):
+        return f"R$ {v:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+    # Preço mais baixo — só se havia preço anterior para comparar
+    if item.get('notificar_preco_baixo', True) and trend == 'down' and old_best:
+        savings = old_best['preco'] - new_best['preco']
+        if savings > 0.01:
+            msg = (
+                f"🔔 <b>TechOfertas — Queda de Preço!</b>\n\n"
+                f"📦 {new_best.get('nome') or item.get('query', '')}\n"
+                f"💰 <b>{fmt(new_best['preco'])}</b> ({fmt(savings)} mais barato)\n"
+                f"🏪 {new_best.get('loja', '')}"
+            )
+            if new_best.get('link'):
+                msg += f"\n🛒 <a href=\"{new_best['link']}\">Ver oferta</a>"
+            _tg_send(cfg['token'], cfg['chat_id'], msg)
+
+    # Valor alvo atingido — notifica apenas na primeira vez que cruza o limiar
+    target = item.get('notificar_valor_alvo')
+    if target and new_best['preco'] <= target:
+        if not old_best or old_best['preco'] > target:
+            msg = (
+                f"🎯 <b>TechOfertas — Valor Alvo Atingido!</b>\n\n"
+                f"📦 {new_best.get('nome') or item.get('query', '')}\n"
+                f"💰 <b>{fmt(new_best['preco'])}</b> (alvo: {fmt(target)})\n"
+                f"🏪 {new_best.get('loja', '')}"
+            )
+            if new_best.get('link'):
+                msg += f"\n🛒 <a href=\"{new_best['link']}\">Ver oferta</a>"
+            _tg_send(cfg['token'], cfg['chat_id'], msg)
+
 
 def _wl_load():
     if WATCHLIST_PATH.exists():
@@ -805,9 +878,12 @@ def _wl_salvar_resultado(item_id, best):
     """Persiste resultado no JSON e retorna trend ('down'|'up'|'same'|None)."""
     wl = _wl_load()
     trend = None
+    saved_item = None
+    saved_old = None
     for it in wl['items']:
         if it['id'] == item_id:
             old = it.get('melhor_preco')
+            saved_old = old
             now_ts = datetime.now(timezone.utc).isoformat()
             it['ultima_busca'] = now_ts
             it['melhor_preco'] = best
@@ -818,8 +894,14 @@ def _wl_salvar_resultado(item_id, best):
             if old and best:
                 diff = best['preco'] - old['preco']
                 trend = 'down' if diff < -0.01 else ('up' if diff > 0.01 else 'same')
+            saved_item = it
             break
     _wl_save(wl)
+    if saved_item and saved_old:
+        try:
+            _tg_notify_price(saved_item, saved_old, best, trend)
+        except Exception:
+            pass
     return trend
 
 
@@ -2477,6 +2559,84 @@ HTML_TEMPLATE = '''
             filter: brightness(1.1);
         }
 
+        /* Telegram Button */
+        .btn-telegram {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            border-radius: var(--radius-md);
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 2px solid #229ED9;
+            color: #229ED9;
+            background: transparent;
+            transition: all 0.2s;
+        }
+        .btn-telegram:hover { background: #229ED9; color: #fff; }
+        .btn-telegram.configured { background: #229ED9; color: #fff; border-color: #229ED9; }
+        .btn-telegram.configured:hover { background: #1a8abf; border-color: #1a8abf; }
+        .btn-telegram svg { flex-shrink: 0; }
+
+        /* Telegram Modal */
+        #telegram-modal .modal-body { padding: 24px; }
+        .tg-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border-radius: var(--radius-md);
+            font-size: 0.85rem;
+            margin-bottom: 18px;
+        }
+        .tg-status.ok { background: #d1fae5; color: #065f46; }
+        .tg-status.not-ok { background: #fee2e2; color: #991b1b; }
+        [data-theme="dark"] .tg-status.ok { background: #064e3b; color: #6ee7b7; }
+        [data-theme="dark"] .tg-status.not-ok { background: #7f1d1d; color: #fca5a5; }
+        .tg-field-row { display: flex; gap: 8px; align-items: flex-end; margin-bottom: 14px; }
+        .tg-field-row .form-group { flex: 1; margin-bottom: 0; }
+        .tg-guide-toggle {
+            background: none;
+            border: none;
+            color: var(--primary-color);
+            font-size: 0.82rem;
+            cursor: pointer;
+            padding: 0;
+            text-decoration: underline;
+            margin-bottom: 14px;
+            display: block;
+        }
+        details.tg-guide { margin-bottom: 18px; }
+        details.tg-guide summary {
+            cursor: pointer;
+            color: var(--primary-color);
+            font-size: 0.82rem;
+            font-weight: 600;
+            user-select: none;
+            margin-bottom: 8px;
+        }
+        .tg-guide-steps {
+            background: var(--background);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            font-size: 0.82rem;
+            line-height: 1.7;
+            color: var(--text-secondary);
+        }
+        .tg-guide-steps ol { margin: 0; padding-left: 18px; }
+        .tg-guide-steps li { margin-bottom: 6px; }
+        .tg-guide-steps code {
+            background: var(--border);
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+            color: var(--text-primary);
+        }
+        .tg-actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+        .tg-actions .btn { flex: 1; min-width: 110px; }
+
         /* Theme Switch Pill */
         .theme-switch {
             display: flex;
@@ -2647,6 +2807,10 @@ HTML_TEMPLATE = '''
                         <p id="watchlist-info-text" style="font-size:0.75rem;color:var(--text-secondary);font-style:italic;margin:0.1rem 0 0;display:none">*Todos os produtos serão atualizados a cada 15 minutos</p>
                     </div>
                     <div class="watchlist-actions">
+                        <button id="btn-telegram" class="btn-telegram" onclick="showTelegramModal()" title="Configurar notificações no Telegram">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                            Telegram
+                        </button>
                         <button class="btn btn-outline" onclick="showAddWatchModal()" style="font-size:0.875rem;padding:0.625rem 1rem">+ Adicionar</button>
                         <button class="btn btn-primary" id="btn-update-all" onclick="updateAllWatched()" style="font-size:0.875rem;padding:0.625rem 1rem">↻ Atualizar todos</button>
                     </div>
@@ -2706,9 +2870,9 @@ HTML_TEMPLATE = '''
                 </div>
             </div>
             <div class="alert-section">
-                <div class="alert-section-title">Alertas de Preco</div>
+                <div class="alert-section-title">Alertas de Preço</div>
                 <label class="alert-toggle" for="watch-notify-lower">
-                    <span class="alert-toggle-text">Notificar quando encontrar preco mais baixo</span>
+                    <span class="alert-toggle-text">Notificar quando encontrar preço mais baixo</span>
                     <input type="checkbox" id="watch-notify-lower" checked>
                     <span class="toggle-switch"></span>
                 </label>
@@ -2762,9 +2926,9 @@ HTML_TEMPLATE = '''
                 </div>
             </div>
             <div class="alert-section">
-                <div class="alert-section-title">Alertas de Preco</div>
+                <div class="alert-section-title">Alertas de Preço</div>
                 <label class="alert-toggle" for="edit-watch-notify-lower">
-                    <span class="alert-toggle-text">Notificar quando encontrar preco mais baixo</span>
+                    <span class="alert-toggle-text">Notificar quando encontrar preço mais baixo</span>
                     <input type="checkbox" id="edit-watch-notify-lower">
                     <span class="toggle-switch"></span>
                 </label>
@@ -2781,6 +2945,52 @@ HTML_TEMPLATE = '''
             <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
                 <button class="btn btn-primary" style="flex:1" onclick="submitEditWatch()">Salvar</button>
                 <button class="btn btn-outline" onclick="closeEditWatchModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Telegram Config Modal -->
+    <div id="telegram-modal" class="modal-overlay" style="display:none" onclick="closeTelegramModal()">
+        <div class="form-modal-box" onclick="event.stopPropagation()" style="max-width:480px">
+            <button class="form-modal-close" onclick="closeTelegramModal()">✕</button>
+            <h3 class="form-modal-title">Notificações no Telegram</h3>
+
+            <div id="tg-status-bar" class="tg-status not-ok" style="display:none"></div>
+
+            <div class="form-group">
+                <label class="form-label">Token do Bot *</label>
+                <input type="text" id="tg-token" class="form-input" placeholder="123456789:ABCdef..." autocomplete="off" />
+            </div>
+
+            <div class="tg-field-row">
+                <div class="form-group">
+                    <label class="form-label">Chat ID *</label>
+                    <input type="text" id="tg-chat-id" class="form-input" placeholder="Ex: 123456789" autocomplete="off" />
+                </div>
+                <button class="btn btn-outline" style="height:42px;font-size:0.8rem;white-space:nowrap" onclick="detectChatId()">Detectar</button>
+            </div>
+
+            <details class="tg-guide">
+                <summary>Como criar meu bot e obter o Token / Chat ID?</summary>
+                <div class="tg-guide-steps">
+                    <ol>
+                        <li>Abra o Telegram e pesquise por <code>@BotFather</code>.</li>
+                        <li>Envie o comando <code>/newbot</code> e siga as instruções para dar um nome ao bot.</li>
+                        <li>O BotFather vai te enviar o <b>Token</b> (parece com <code>123456789:ABCdef...</code>). Cole-o no campo acima.</li>
+                        <li>Abra uma conversa com o seu novo bot e envie qualquer mensagem (ex: <code>oi</code>).</li>
+                        <li>Cole o Token no campo acima e clique em <b>Detectar</b> para preencher o Chat ID automaticamente.</li>
+                        <li>Clique em <b>Salvar</b> e depois em <b>Testar</b> para confirmar que está funcionando.</li>
+                        <li>A partir de agora, quando o preço de um produto acompanhado cair ou atingir seu alvo, você receberá uma mensagem no Telegram.</li>
+                        <li><b>Dica:</b> Você pode pesquisar por <code>@userinfobot</code> no Telegram e enviar <code>/start</code> para ver seu Chat ID diretamente.</li>
+                    </ol>
+                </div>
+            </details>
+
+            <div class="tg-actions">
+                <button class="btn btn-outline" onclick="closeTelegramModal()">Cancelar</button>
+                <button class="btn btn-outline" id="btn-tg-test" onclick="testTelegram()" style="display:none">Testar</button>
+                <button class="btn btn-danger" id="btn-tg-remove" onclick="removeTelegram()" style="display:none;background:#ef4444;border-color:#ef4444;color:#fff">Remover</button>
+                <button class="btn btn-primary" onclick="saveTelegram()">Salvar</button>
             </div>
         </div>
     </div>
@@ -2890,6 +3100,7 @@ HTML_TEMPLATE = '''
             setupScrollToTop();
             checkAutoUpdate();
             _restoreSession();
+            loadTelegramConfig();
             document.getElementById('watch-nome').addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') submitAddWatch();
             });
@@ -4368,12 +4579,28 @@ HTML_TEMPLATE = '''
         // ALERT TOGGLE HELPERS
         // ================================================================
         function initAlertToggles(prefix) {
-            const cb = document.getElementById(prefix + 'notify-target');
-            const field = document.getElementById(prefix + 'target-field');
-            if (!cb || !field) return;
-            const sync = () => field.classList.toggle('visible', cb.checked);
-            cb.addEventListener('change', sync);
-            sync();
+            const cbLower  = document.getElementById(prefix + 'notify-lower');
+            const cbTarget = document.getElementById(prefix + 'notify-target');
+            const field    = document.getElementById(prefix + 'target-field');
+            if (!cbLower || !cbTarget || !field) return;
+
+            const syncField = () => field.classList.toggle('visible', cbTarget.checked);
+
+            // Use onchange (assignment) to avoid listener accumulation on repeated modal opens
+            cbLower.onchange = () => {
+                if (cbLower.checked) {
+                    cbTarget.checked = false;
+                    syncField();
+                }
+            };
+            cbTarget.onchange = () => {
+                if (cbTarget.checked) {
+                    cbLower.checked = false;
+                }
+                syncField();
+            };
+
+            syncField();
         }
 
         function showAddWatchModal() {
@@ -4408,9 +4635,11 @@ HTML_TEMPLATE = '''
             document.getElementById('edit-watch-nome').value = item.query || '';
             document.getElementById('edit-watch-valor-min').value = item.valor_minimo > 0 ? item.valor_minimo : '';
             document.getElementById('edit-watch-valor-max').value = item.valor_maximo != null ? item.valor_maximo : '';
-            document.getElementById('edit-watch-notify-lower').checked = item.notificar_preco_baixo !== false;
-            document.getElementById('edit-watch-notify-target').checked = !!item.notificar_valor_alvo;
-            document.getElementById('edit-watch-target-price').value = item.notificar_valor_alvo || '';
+            // Priority: if a numeric target price is saved → show target; otherwise → show lower
+            const hasTarget = typeof item.notificar_valor_alvo === 'number' && item.notificar_valor_alvo > 0;
+            document.getElementById('edit-watch-notify-lower').checked = !hasTarget;
+            document.getElementById('edit-watch-notify-target').checked = hasTarget;
+            document.getElementById('edit-watch-target-price').value = hasTarget ? item.notificar_valor_alvo : '';
             const lojas = item.lojas || {};
             ['kabum','pichau','terabyte','mercadolivre','magalu','amazon','shopee','casasbahia'].forEach(s => {
                 const cb = document.getElementById(`edit-wl-${s}`);
@@ -4661,6 +4890,146 @@ HTML_TEMPLATE = '''
         setInterval(function() {
             if (watchlistData.length > 0) renderWatchlist();
         }, 60000);
+
+        // ── Telegram Integration ──────────────────────────────────────────
+        let _tgConfigured = false;
+
+        function updateTelegramButton(configured) {
+            _tgConfigured = configured;
+            const btn = document.getElementById('btn-telegram');
+            if (!btn) return;
+            if (configured) {
+                btn.classList.add('configured');
+                btn.title = 'Telegram configurado — clique para editar';
+            } else {
+                btn.classList.remove('configured');
+                btn.title = 'Configurar notificações no Telegram';
+            }
+        }
+
+        function loadTelegramConfig() {
+            fetch('/telegram/config')
+                .then(r => r.json())
+                .then(d => {
+                    updateTelegramButton(d.configured);
+                })
+                .catch(() => {});
+        }
+
+        function showTelegramModal() {
+            document.getElementById('tg-status-bar').style.display = 'none';
+            document.getElementById('tg-token').value = '';
+            document.getElementById('tg-chat-id').value = '';
+            const testBtn = document.getElementById('btn-tg-test');
+            const removeBtn = document.getElementById('btn-tg-remove');
+            fetch('/telegram/config')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.configured) {
+                        document.getElementById('tg-chat-id').value = d.chat_id || '';
+                        document.getElementById('tg-token').placeholder = d.token_masked || 'Token já configurado';
+                        _showTgStatus('ok', 'Telegram configurado. Deixe o Token em branco para manter o atual.');
+                        testBtn.style.display = '';
+                        removeBtn.style.display = '';
+                    } else {
+                        testBtn.style.display = 'none';
+                        removeBtn.style.display = 'none';
+                    }
+                })
+                .catch(() => {});
+            document.getElementById('telegram-modal').style.display = 'flex';
+        }
+
+        function closeTelegramModal() {
+            document.getElementById('telegram-modal').style.display = 'none';
+        }
+
+        function _showTgStatus(type, msg) {
+            const bar = document.getElementById('tg-status-bar');
+            bar.className = 'tg-status ' + type;
+            bar.textContent = msg;
+            bar.style.display = 'flex';
+        }
+
+        function saveTelegram() {
+            const token = document.getElementById('tg-token').value.trim();
+            const chatId = document.getElementById('tg-chat-id').value.trim();
+            if (!chatId) { _showTgStatus('not-ok', 'Preencha o Chat ID.'); return; }
+
+            // If token blank and already configured, just update chat_id with current token
+            const payload = token ? { token, chat_id: chatId } : null;
+            if (!payload) {
+                // Need token to save — fetch current masked and ask user
+                _showTgStatus('not-ok', 'Digite o Token para salvar (ou use o botão Testar se já configurado).');
+                return;
+            }
+
+            fetch('/telegram/config', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.ok) {
+                        updateTelegramButton(true);
+                        document.getElementById('btn-tg-test').style.display = '';
+                        document.getElementById('btn-tg-remove').style.display = '';
+                        document.getElementById('tg-token').value = '';
+                        document.getElementById('tg-token').placeholder = 'Token salvo';
+                        _showTgStatus('ok', 'Configuração salva! Clique em Testar para verificar.');
+                    } else {
+                        _showTgStatus('not-ok', d.error || 'Erro ao salvar.');
+                    }
+                })
+                .catch(() => _showTgStatus('not-ok', 'Erro de rede.'));
+        }
+
+        function removeTelegram() {
+            if (!confirm('Remover configuração do Telegram?')) return;
+            fetch('/telegram/config', { method: 'DELETE' })
+                .then(r => r.json())
+                .then(() => {
+                    updateTelegramButton(false);
+                    document.getElementById('tg-token').value = '';
+                    document.getElementById('tg-token').placeholder = '123456789:ABCdef...';
+                    document.getElementById('tg-chat-id').value = '';
+                    document.getElementById('btn-tg-test').style.display = 'none';
+                    document.getElementById('btn-tg-remove').style.display = 'none';
+                    _showTgStatus('not-ok', 'Configuração removida.');
+                })
+                .catch(() => _showTgStatus('not-ok', 'Erro de rede.'));
+        }
+
+        function detectChatId() {
+            const token = document.getElementById('tg-token').value.trim();
+            if (!token) { _showTgStatus('not-ok', 'Cole o Token antes de detectar o Chat ID.'); return; }
+            _showTgStatus('ok', 'Detectando Chat ID...');
+            fetch('/telegram/detect_chat_id', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ token }) })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.ok) {
+                        document.getElementById('tg-chat-id').value = d.chat_id;
+                        _showTgStatus('ok', 'Chat ID detectado: ' + d.chat_id + '. Clique em Salvar para confirmar.');
+                    } else {
+                        _showTgStatus('not-ok', d.error || 'Não foi possível detectar o Chat ID.');
+                    }
+                })
+                .catch(() => _showTgStatus('not-ok', 'Erro de rede.'));
+        }
+
+        function testTelegram() {
+            const token = document.getElementById('tg-token').value.trim();
+            const chatId = document.getElementById('tg-chat-id').value.trim();
+            _showTgStatus('ok', 'Enviando mensagem de teste...');
+            fetch('/telegram/test', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ token: token || undefined, chat_id: chatId || undefined }) })
+                .then(r => r.json())
+                .then(d => {
+                    if (d.ok) {
+                        _showTgStatus('ok', '✓ Mensagem enviada com sucesso! Verifique o Telegram.');
+                    } else {
+                        _showTgStatus('not-ok', d.error || 'Falha ao enviar mensagem.');
+                    }
+                })
+                .catch(() => _showTgStatus('not-ok', 'Erro de rede.'));
+        }
+        // ─────────────────────────────────────────────────────────────────
     </script>
 </body>
 </html>
@@ -6230,6 +6599,97 @@ def wl_update_all():
 
     return Response(stream_with_context(generate()), mimetype='text/event-stream',
                     headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no', 'Connection': 'keep-alive'})
+
+
+@app.route('/telegram/config', methods=['GET'])
+def tg_config_get():
+    cfg = _tg_load()
+    # Never return the full token to the frontend — mask it
+    token = cfg.get('token', '')
+    masked = ('*' * (len(token) - 6) + token[-6:]) if len(token) > 6 else ('*' * len(token))
+    return jsonify({'configured': bool(token and cfg.get('chat_id')),
+                    'token_masked': masked,
+                    'chat_id': cfg.get('chat_id', '')})
+
+
+@app.route('/telegram/config', methods=['POST'])
+def tg_config_save():
+    body = request.get_json(force=True) or {}
+    token = (body.get('token') or '').strip()
+    chat_id = (body.get('chat_id') or '').strip()
+    if not token or not chat_id:
+        return jsonify({'ok': False, 'error': 'Token e Chat ID são obrigatórios.'}), 400
+    _tg_save({'token': token, 'chat_id': chat_id})
+    return jsonify({'ok': True})
+
+
+@app.route('/telegram/config', methods=['DELETE'])
+def tg_config_delete():
+    _tg_save({'token': '', 'chat_id': ''})
+    return jsonify({'ok': True})
+
+
+@app.route('/telegram/test', methods=['POST'])
+def tg_test():
+    cfg = _tg_load()
+    body = request.get_json(force=True) or {}
+    token = (body.get('token') or cfg.get('token', '')).strip()
+    chat_id = (body.get('chat_id') or cfg.get('chat_id', '')).strip()
+    if not token or not chat_id:
+        return jsonify({'ok': False, 'error': 'Configure token e chat_id antes de testar.'}), 400
+    ok, err = _tg_send(token, chat_id,
+                       '✅ <b>TechOfertas</b>\n\nNotificações do Telegram configuradas com sucesso!')
+    if ok:
+        return jsonify({'ok': True})
+    return jsonify({'ok': False, 'error': err}), 502
+
+
+@app.route('/telegram/detect_chat_id', methods=['POST'])
+def tg_detect_chat_id():
+    body = request.get_json(force=True) or {}
+    token = (body.get('token') or '').strip()
+    if not token:
+        return jsonify({'ok': False, 'error': 'Token não informado.'}), 400
+    url = f'https://api.telegram.org/bot{token}/getUpdates?limit=100'
+    req = urllib.request.Request(url, method='GET')
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body_err = e.read().decode(errors='replace')
+        try:
+            msg = json.loads(body_err).get('description', body_err)
+        except Exception:
+            msg = body_err
+        return jsonify({'ok': False, 'error': f'Telegram recusou: {msg}'}), 400
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 502
+
+    if not data.get('ok'):
+        return jsonify({'ok': False, 'error': data.get('description', 'Token inválido.')}), 400
+
+    results = data.get('result', [])
+    if not results:
+        return jsonify({
+            'ok': False,
+            'error': 'Nenhuma mensagem encontrada. Abra o Telegram, encontre seu bot e envie qualquer mensagem (ex: "oi"), depois clique em Detectar novamente.'
+        }), 404
+
+    # Percorre updates do mais recente para o mais antigo procurando qualquer chat
+    chat_id = None
+    for update in reversed(results):
+        for key in ('message', 'edited_message', 'channel_post', 'my_chat_member', 'chat_member'):
+            entry = update.get(key)
+            if entry and entry.get('chat', {}).get('id'):
+                chat_id = str(entry['chat']['id'])
+                break
+        if chat_id:
+            break
+
+    if not chat_id:
+        return jsonify({'ok': False, 'error': 'Não foi possível extrair o Chat ID. Tente enviar outra mensagem ao bot.'}), 404
+
+    return jsonify({'ok': True, 'chat_id': chat_id})
 
 
 import sys

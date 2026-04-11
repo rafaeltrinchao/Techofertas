@@ -3,6 +3,7 @@ __pycache__/
 venv/
 .env
 watchlist.json
+telegram_config.json
 *.log
 .claude/
 docs/
