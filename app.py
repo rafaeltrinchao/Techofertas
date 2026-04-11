@@ -14,6 +14,13 @@ from pathlib import Path
 from flask import Flask, render_template_string, jsonify, request, Response, stream_with_context, send_file
 from concurrent.futures import ThreadPoolExecutor
 
+try:
+    from curl_cffi import requests as _cffi_requests
+    _CB_SESSION = _cffi_requests.Session(impersonate='chrome124')
+except ImportError:
+    _cffi_requests = None
+    _CB_SESSION = None
+
 # PyInstaller: bundled assets live in sys._MEIPASS; user data lives next to the exe
 import sys as _sys
 _BUNDLE_DIR = Path(getattr(_sys, '_MEIPASS', Path(__file__).parent))
@@ -1836,6 +1843,10 @@ HTML_TEMPLATE = '''
                                 <input type="checkbox" id="shopee" class="store-checkbox" value="shopee" checked>
                                 <label for="shopee" class="store-label"><img src="https://www.google.com/s2/favicons?domain=shopee.com.br&sz=32" class="store-label-logo" alt=""> Shopee</label>
                             </div>
+                            <div class="store-option">
+                                <input type="checkbox" id="casasbahia" class="store-checkbox" value="casasbahia" checked>
+                                <label for="casasbahia" class="store-label"><img src="https://www.google.com/s2/favicons?domain=casasbahia.com.br&sz=32" class="store-label-logo" alt=""> Casas Bahia</label>
+                            </div>
                         </div>
                     </div>
 
@@ -1929,6 +1940,7 @@ HTML_TEMPLATE = '''
                     <div class="store-option"><input type="checkbox" id="wl-magalu" class="store-checkbox wl-store-checkbox" value="magalu" checked><label for="wl-magalu" class="store-label"><img src="https://www.google.com/s2/favicons?domain=magazineluiza.com.br&sz=32" class="store-label-logo" alt=""> Magalu</label></div>
                     <div class="store-option"><input type="checkbox" id="wl-amazon" class="store-checkbox wl-store-checkbox" value="amazon" checked><label for="wl-amazon" class="store-label"><img src="https://www.google.com/s2/favicons?domain=amazon.com.br&sz=32" class="store-label-logo" alt=""> Amazon</label></div>
                     <div class="store-option"><input type="checkbox" id="wl-shopee" class="store-checkbox wl-store-checkbox" value="shopee" checked><label for="wl-shopee" class="store-label"><img src="https://www.google.com/s2/favicons?domain=shopee.com.br&sz=32" class="store-label-logo" alt=""> Shopee</label></div>
+                    <div class="store-option"><input type="checkbox" id="wl-casasbahia" class="store-checkbox wl-store-checkbox" value="casasbahia" checked><label for="wl-casasbahia" class="store-label"><img src="https://www.google.com/s2/favicons?domain=casasbahia.com.br&sz=32" class="store-label-logo" alt=""> Casas Bahia</label></div>
                 </div>
             </div>
             <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
@@ -1965,6 +1977,7 @@ HTML_TEMPLATE = '''
                     <div class="store-option"><input type="checkbox" id="edit-wl-magalu" class="store-checkbox" value="magalu"><label for="edit-wl-magalu" class="store-label"><img src="https://www.google.com/s2/favicons?domain=magazineluiza.com.br&sz=32" class="store-label-logo" alt=""> Magalu</label></div>
                     <div class="store-option"><input type="checkbox" id="edit-wl-amazon" class="store-checkbox" value="amazon"><label for="edit-wl-amazon" class="store-label"><img src="https://www.google.com/s2/favicons?domain=amazon.com.br&sz=32" class="store-label-logo" alt=""> Amazon</label></div>
                     <div class="store-option"><input type="checkbox" id="edit-wl-shopee" class="store-checkbox" value="shopee"><label for="edit-wl-shopee" class="store-label"><img src="https://www.google.com/s2/favicons?domain=shopee.com.br&sz=32" class="store-label-logo" alt=""> Shopee</label></div>
+                    <div class="store-option"><input type="checkbox" id="edit-wl-casasbahia" class="store-checkbox" value="casasbahia"><label for="edit-wl-casasbahia" class="store-label"><img src="https://www.google.com/s2/favicons?domain=casasbahia.com.br&sz=32" class="store-label-logo" alt=""> Casas Bahia</label></div>
                 </div>
             </div>
             <div style="display:flex;gap:0.75rem;margin-top:1.5rem">
@@ -2451,7 +2464,7 @@ HTML_TEMPLATE = '''
              }
 
              // Add individual store sections (ordem fixa para consistência)
-             const storeOrder = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon', 'shopee'];
+             const storeOrder = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon', 'shopee', 'casasbahia'];
              const orderedStores = storeOrder.filter(s => selectedStores.includes(s))
                  .concat(selectedStores.filter(s => !storeOrder.includes(s)));
              orderedStores.forEach(store => {
@@ -2625,6 +2638,8 @@ HTML_TEMPLATE = '''
                 'mercadolivre': 'Nenhuma oferta encontrada no Mercado Livre',
                 'magalu': 'Nenhuma oferta encontrada no Magalu',
                 'amazon': 'Nenhuma oferta encontrada na Amazon',
+                'shopee': 'Nenhuma oferta encontrada na Shopee',
+                'casasbahia': 'Nenhuma oferta encontrada nas Casas Bahia',
                 'melhores': 'Nenhuma oferta encontrada'
             };
 
@@ -2666,6 +2681,8 @@ HTML_TEMPLATE = '''
                 'magalu': 'Magalu',
                 'amazon': 'Amazon',
                 'shopee': 'Shopee',
+                'casasbahia': 'Casas Bahia',
+                'Casasbahia': 'Casas Bahia',
                 'melhores': 'Melhores Ofertas'
             };
             return names[store] || store;
@@ -2685,6 +2702,8 @@ HTML_TEMPLATE = '''
                 'magalu': 'magazineluiza.com.br',
                 'amazon': 'amazon.com.br',
                 'shopee': 'shopee.com.br',
+                'casasbahia': 'casasbahia.com.br',
+                'Casasbahia': 'casasbahia.com.br',
             };
             const domain = domains[store];
             if (!domain) return '<span style="line-height:1">⭐</span>';
@@ -3359,7 +3378,7 @@ HTML_TEMPLATE = '''
             document.getElementById('edit-watch-valor-min').value = item.valor_minimo > 0 ? item.valor_minimo : '';
             document.getElementById('edit-watch-valor-max').value = item.valor_maximo != null ? item.valor_maximo : '';
             const lojas = item.lojas || {};
-            ['kabum','pichau','terabyte','mercadolivre','magalu','amazon'].forEach(s => {
+            ['kabum','pichau','terabyte','mercadolivre','magalu','amazon','shopee','casasbahia'].forEach(s => {
                 const cb = document.getElementById(`edit-wl-${s}`);
                 if (cb) cb.checked = lojas[s] !== false;
             });
@@ -3378,7 +3397,7 @@ HTML_TEMPLATE = '''
             const valorMin = document.getElementById('edit-watch-valor-min').value;
             const valorMax = document.getElementById('edit-watch-valor-max').value;
             const lojas = {};
-            ['kabum','pichau','terabyte','mercadolivre','magalu','amazon'].forEach(s => {
+            ['kabum','pichau','terabyte','mercadolivre','magalu','amazon','shopee','casasbahia'].forEach(s => {
                 lojas[s] = document.getElementById(`edit-wl-${s}`).checked;
             });
             if (!Object.values(lojas).some(v => v)) { showNotification('Selecione pelo menos uma loja.', 'error'); return; }
@@ -3411,7 +3430,7 @@ HTML_TEMPLATE = '''
             const query = document.getElementById('watch-nome').value.trim();
             if (!query) { showNotification('Informe o nome do produto.', 'error'); return; }
             const lojas = {};
-            ['kabum','pichau','terabyte','mercadolivre','magalu','amazon'].forEach(s => {
+            ['kabum','pichau','terabyte','mercadolivre','magalu','amazon','shopee','casasbahia'].forEach(s => {
                 const cb = document.getElementById(`wl-${s}`);
                 lojas[s] = cb ? cb.checked : true;
             });
@@ -4536,12 +4555,123 @@ def buscar_shopee(produto, valor_minimo, valor_maximo):
         return [], False
 
 
+def buscar_casas_bahia(produto, valor_minimo, valor_maximo):
+    """
+    Busca na Casas Bahia via APIs internas (2 requests, sem Akamai):
+    1. api-partner-prd.casasbahia.com.br/api/v3/web/busca → lista de produtos + IDs
+    2. api.casasbahia.com.br/merchandising/oferta/v1/Preco → preços + parcelamento
+    Header necessário: apiKey (exposta no __NEXT_DATA__ da página)
+    """
+    if _CB_SESSION is None:
+        return [], False
+
+    CB_PRICE_API_KEY = 'd081fef8c2c44645bb082712ed32a047'
+    CB_COMPOSICAO = 'DescontoFormaPagamento,MelhoresParcelamentos'
+    CB_HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'pt-BR,pt;q=0.9',
+        'Referer': 'https://www.casasbahia.com.br/',
+        'Origin': 'https://www.casasbahia.com.br',
+        'apiKey': CB_PRICE_API_KEY,
+    }
+
+    ofertas = []
+    encontrou = False
+    try:
+        query = urllib.parse.quote_plus(produto.strip())
+
+        # Step 1: Busca
+        r_search = _CB_SESSION.get(
+            f'https://api-partner-prd.casasbahia.com.br/api/v3/web/busca?Terms={query}&Page=1&PageSize=20',
+            headers=CB_HEADERS,
+            timeout=20,
+        )
+        if r_search.status_code != 200:
+            return [], False
+
+        search_data = r_search.json()
+        products = search_data.get('products', [])
+        if not products:
+            return [], False
+
+        encontrou = True
+
+        prod_ids = [p['id'] for p in products]
+        meta = {p['id']: p for p in products}
+
+        # Step 2: Preços (batch por product IDs)
+        params = urllib.parse.urlencode({
+            'idsProduto': ','.join(prod_ids),
+            'composicao': CB_COMPOSICAO,
+        })
+        r_price = _CB_SESSION.get(
+            f'https://api.casasbahia.com.br/merchandising/oferta/v1/Preco/Produto/PrecoVenda/?{params}',
+            headers=CB_HEADERS,
+            timeout=20,
+        )
+        if r_price.status_code != 200:
+            return [], encontrou
+
+        price_data = r_price.json()
+
+        for item in price_data.get('PrecoProdutos', []):
+            pv = item.get('PrecoVenda', {})
+            if not pv:
+                continue
+
+            prod_id = str(pv.get('IdProduto', ''))
+            info = meta.get(prod_id, {})
+
+            if not info.get('status') == 'AVAILABLE':
+                continue
+            if not pv.get('DisponibilidadeVenda'):
+                continue
+
+            df = item.get('DescontoFormaPagamento', {})
+            preco_pix = df.get('PrecoVendaComDesconto') if df.get('PossuiDesconto') else None
+            preco = float(preco_pix or pv.get('Preco', 0))
+            if preco <= 0:
+                continue
+
+            nome = info.get('name', pv.get('IdProduto', ''))
+            if not nome_compativel_com_busca(nome, produto):
+                continue
+            if not (valor_minimo <= preco <= valor_maximo):
+                continue
+
+            n_parc = pv.get('NumeroParcelas', 0)
+            val_parc = pv.get('ValorParcela', 0.0)
+            parcelamento = None
+            if n_parc and val_parc:
+                preco_normal = float(pv.get('Preco', 0))
+                total_parc = round(n_parc * val_parc, 2)
+                sem_juros = abs(total_parc - preco_normal) < 0.02
+                parcelamento = {'parcelas': n_parc, 'valor': float(val_parc), 'sem_juros': sem_juros}
+
+            ofertas.append({
+                'nome': nome,
+                'preco': preco,
+                'link': info.get('url', ''),
+                'imagem': info.get('image', ''),
+                'loja': 'Casas Bahia',
+                'parcelamento': parcelamento,
+            })
+
+        ofertas.sort(key=lambda x: x['preco'])
+        return ofertas, encontrou
+
+    except Exception as e:
+        print(f'Erro Casas Bahia: {e}')
+        return [], encontrou
+
+
 @app.route('/')
 def home():
     return render_template_string(HTML_TEMPLATE)
 
 def _resposta_busca_vazia(mensagem=None):
-    out = {'kabum': [], 'pichau': [], 'terabyte': [], 'mercadolivre': [], 'magalu': [], 'amazon': [], 'shopee': [], 'melhores_ofertas': []}
+    out = {'kabum': [], 'pichau': [], 'terabyte': [], 'mercadolivre': [], 'magalu': [], 'amazon': [], 'shopee': [], 'casasbahia': [], 'melhores_ofertas': []}
     if mensagem:
         out['erro'] = mensagem
     return jsonify(out)
@@ -4566,11 +4696,11 @@ def buscar_todas():
         valor_maximo = float('inf')
     else:
         valor_maximo = float(valor_maximo)
-    filtros = dados.get('filtros', {'kabum': True, 'pichau': True, 'terabyte': True, 'mercadolivre': True, 'magalu': True, 'amazon': True, 'shopee': True})
+    filtros = dados.get('filtros', {'kabum': True, 'pichau': True, 'terabyte': True, 'mercadolivre': True, 'magalu': True, 'amazon': True, 'shopee': True, 'casasbahia': True})
 
     result = {}
     todas_ofertas = []
-    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon', 'shopee']
+    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon', 'shopee', 'casasbahia']
     buscadores = {
         'kabum': buscar_kabum,
         'pichau': buscar_pichau,
@@ -4579,6 +4709,7 @@ def buscar_todas():
         'magalu': buscar_magalu,
         'amazon': buscar_amazon,
         'shopee': buscar_shopee,
+        'casasbahia': buscar_casas_bahia,
     }
 
     def verificar_site(resultados, nome_site, encontrou_produtos):
@@ -4653,9 +4784,9 @@ def buscar_stream():
     try:
         filtros = json.loads(request.args.get('filtros', '{}'))
     except Exception:
-        filtros = {s: True for s in ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon']}
+        filtros = {s: True for s in ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon', 'shopee', 'casasbahia']}
 
-    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon', 'shopee']
+    todas_lojas = ['kabum', 'pichau', 'terabyte', 'mercadolivre', 'magalu', 'amazon', 'shopee', 'casasbahia']
     lojas_ativas = [s for s in todas_lojas if filtros.get(s)]
 
     if not lojas_ativas:
@@ -4669,6 +4800,7 @@ def buscar_stream():
         'magalu': buscar_magalu,
         'amazon': buscar_amazon,
         'shopee': buscar_shopee,
+        'casasbahia': buscar_casas_bahia,
     }
 
     def _verificar(resultados, nome_site, encontrou):
@@ -4779,7 +4911,7 @@ def wl_add():
         'id': uuid.uuid4().hex[:8],
         'query': query,
         'link': link or None,
-        'lojas': dados.get('lojas', {'kabum': True, 'pichau': True, 'terabyte': True, 'mercadolivre': True, 'magalu': True, 'amazon': True}),
+        'lojas': dados.get('lojas', {'kabum': True, 'pichau': True, 'terabyte': True, 'mercadolivre': True, 'magalu': True, 'amazon': True, 'shopee': True, 'casasbahia': True}),
         'valor_minimo': dados.get('valor_minimo', 0),
         'valor_maximo': dados.get('valor_maximo', None),
         'adicionado_em': datetime.now(timezone.utc).isoformat(),
@@ -4865,6 +4997,7 @@ def wl_update_one(item_id):
             'kabum': buscar_kabum, 'pichau': buscar_pichau,
             'terabyte': buscar_terabyte, 'mercadolivre': buscar_mercadolivre,
             'magalu': buscar_magalu, 'amazon': buscar_amazon, 'shopee': buscar_shopee,
+            'casasbahia': buscar_casas_bahia,
         }
         lojas = [s for s, v in (item.get('lojas') or {}).items() if v and s in buscadores]
         vm = float(item.get('valor_minimo') or 0)
