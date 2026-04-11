@@ -482,15 +482,30 @@ def is_produto_novo(titulo: str, query: str) -> bool:
     if any(t in _QUERY_QUER_USADO_NORM for t in query_norm.split()):
         return True
 
-    # 1. Prefixo "Usado:" ou "Usado -" (ML marca itens usados assim)
-    if re.search(r'^usado\b', titulo_norm):
+    # 1. "Usado" em qualquer posição do título (normalizado ou em parênteses no original)
+    # Captura: "Usado: Apple iPhone...", "Apple iPhone 15 (Usado)", "Apple iPhone - Usado"
+    if re.search(r'\busad[ao]s?\b', titulo_norm):
         return False
 
     # 2. Palavras explícitas de condição usada/recondicionada
+    # Inclui "condicionado" (sellers às vezes omitem o "re-") e "(Recondicionado)" com parênteses.
+    # Nota: "ar condicionado" é produto legítimo — detectado via lookbehind no título original.
     if re.search(
-        r'\b(?:recondicionad[ao]s?|seminov[ao]s?|semi[\s-]nov[ao]s?'
+        r'\b(?:recondicionad[ao]s?|condicionad[ao]s?|seminov[ao]s?|semi[\s-]nov[ao]s?'
         r'|vitrine|remanufaturad[ao]s?|refurbished)\b',
         titulo_norm,
+    ):
+        # Falso positivo: "Ar Condicionado" é produto legítimo — não filtrar
+        if re.search(r'\bar\s+condicionad', titulo_norm):
+            pass  # manter — é aparelho de ar condicionado
+        else:
+            return False
+
+    # 2b. Padrão explícito com parênteses no título ORIGINAL (antes da normalização)
+    # Captura: "(Usado)", "(Recondicionado)", "(Condicionado)", "(Muito Bom)", "(Excelente)", "(Bom)"
+    if re.search(
+        r'\((?:Usado|Usada|Recondicionado|Condicionado|Muito\s+Bom|Excelente|Bom)\)',
+        titulo, re.IGNORECASE,
     ):
         return False
 
@@ -798,6 +813,29 @@ SUITE_NOVO = [
     # Padrão 5: último token = condição
     ("iPhone 14", "Apple iPhone 14 128GB Excelente", False),
     ("Galaxy S24", "Samsung Galaxy S24 Ultra 512GB Bom", False),
+
+    # ===================================================================
+    # Padrões com parênteses — iPhone 15 (novos casos reportados)
+    # ===================================================================
+    # "(Usado)" no meio do título
+    ("iPhone 15", "Apple iPhone 15 128GB Preto (Usado) Desbloqueado Nacional", False),
+    ("iPhone 15", "Apple iPhone 15 Pro 256GB Natural (Usado) Bom Estado", False),
+    # "(Recondicionado)" em parênteses
+    ("iPhone 15", "Apple iPhone 15 128GB Meia-noite (Recondicionado) Lacrado", False),
+    ("iPhone 15", "Apple iPhone 15 Plus 512GB Amarelo (Recondicionado)", False),
+    # "(Condicionado)" — sellers que omitem o "re-"
+    ("iPhone 15", "Apple iPhone 15 128GB Azul (Condicionado) Excelente", False),
+    # "(Muito Bom)" em parênteses
+    ("iPhone 15", "Apple iPhone 15 128GB Preto (Muito Bom)", False),
+    # "(Excelente)" em parênteses
+    ("iPhone 15", "Apple iPhone 15 Pro 256GB Titanio (Excelente)", False),
+    # Produtos NOVOS iPhone 15 — não devem ser filtrados
+    ("iPhone 15", "Apple iPhone 15 128GB Preto A3092 Lacrado NF-e", True),
+    ("iPhone 15", "Apple iPhone 15 Pro Max 512GB Titanio Natural Lacrado", True),
+    ("iPhone 15", "Apple iPhone 15 Plus 128GB Azul MTXM3BZ/A Lacrado", True),
+    # "Ar Condicionado" — produto legítimo, não deve ser filtrado
+    ("ar condicionado", "Ar Condicionado LG Dual Inverter 9000 BTUs Frio S4-Q09WA3WD", True),
+    ("ar condicionado", "Ar Condicionado Split Samsung Wind Free 12000 BTUs", True),
 ]
 
 
