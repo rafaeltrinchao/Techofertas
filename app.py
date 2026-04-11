@@ -4208,10 +4208,15 @@ HTML_TEMPLATE = '''
             const installmentHTML = product.parcelamento ? (() => {
                 const p = product.parcelamento;
                 const val = p.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                const totalNum = p.parcelas * p.valor;
                 const badge = p.sem_juros
                     ? '<span class="badge-sem-juros">sem juros</span>'
                     : '<span class="badge-com-juros">com juros</span>';
-                return `<div class="grid-card-installment">${p.parcelas}x R$ ${val} ${badge}</div>`;
+                const melhorCompra = (p.sem_juros && Math.abs(totalNum - product.preco) < 0.02)
+                    ? ' <span class="badge-melhor-compra">mesmo preço à vista</span>'
+                    : '';
+                const total = totalNum.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+                return `<div class="grid-card-installment">💳 R$ ${total} · ${p.parcelas}x R$ ${val} ${badge}${melhorCompra}</div>`;
             })() : '';
 
             const storeHTML = product.loja
