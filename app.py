@@ -21,6 +21,8 @@ except ImportError:
     _cffi_requests = None
     _CB_SESSION = None
 
+from filtro_produto_principal import is_produto_principal
+
 # Cache do buildId da Magalu (invalidado automaticamente em caso de 404)
 _MAGALU_BUILD_ID = None
 
@@ -3781,6 +3783,8 @@ def terabyte_tentar_parse_listagem(html, produto, valor_minimo, valor_maximo):
             continue
         if not nome_compativel_com_busca(nome, produto):
             continue
+        if not is_produto_principal(nome, produto):
+            continue
         if not (valor_minimo <= preco_valor <= valor_maximo):
             continue
         imgm = re.search(r'<img[^>]+src="(https://img\.terabyteshop\.com\.br[^"]+)"', bloco)
@@ -3851,6 +3855,8 @@ def _terabyte_processar_links_sequencial(args):
                 continue
             if not nome_compativel_com_busca(o['nome'], produto):
                 continue
+            if not is_produto_principal(o['nome'], produto):
+                continue
             if not (valor_minimo <= o['preco'] <= valor_maximo):
                 continue
             ofertas.append(o)
@@ -3916,6 +3922,8 @@ def buscar_kabum(produto, valor_minimo, valor_maximo):
                 continue
             if not nome_compativel_com_busca(nome, produto):
                 continue
+            if not is_produto_principal(nome, produto):
+                continue
             if not (valor_minimo <= preco_valor <= valor_maximo):
                 continue
             link = f'https://www.kabum.com.br/produto/{code}'
@@ -3973,6 +3981,8 @@ def _pichau_parse_rsc(data, produto, valor_minimo, valor_maximo):
             continue
         if not nome_compativel_com_busca(nome, produto):
             continue
+        if not is_produto_principal(nome, produto):
+            continue
 
         prices = item.get('pichau_prices') or {}
         preco_valor = prices.get('avista')
@@ -4029,6 +4039,8 @@ def _pichau_parse_html_fallback(html, produto, valor_minimo, valor_maximo):
         if preco_valor is None:
             continue
         if not nome_compativel_com_busca(nome, produto):
+            continue
+        if not is_produto_principal(nome, produto):
             continue
         if not (valor_minimo <= preco_valor <= valor_maximo):
             continue
@@ -4102,6 +4114,8 @@ def _terabyte_parse_listagem(html, produto, valor_minimo, valor_maximo):
         nome = unescape(re.sub(r'\s+', ' ', nm.group(1).strip()))
 
         if not nome_compativel_com_busca(nome, produto):
+            continue
+        if not is_produto_principal(nome, produto):
             continue
 
         # Link
@@ -4309,6 +4323,8 @@ def buscar_magalu(produto, valor_minimo, valor_maximo):
                 continue
             if not nome_compativel_com_busca(nome, produto):
                 continue
+            if not is_produto_principal(nome, produto):
+                continue
             price_data = p.get('price') or {}
             preco_str = price_data.get('bestPrice') or price_data.get('fullPrice')
             if not preco_str:
@@ -4447,6 +4463,8 @@ def buscar_amazon(produto, valor_minimo, valor_maximo):
             nome = unescape(re.sub(r'\s+', ' ', h2.group(1).strip()))
 
             if not nome_compativel_com_busca(nome, produto):
+                continue
+            if not is_produto_principal(nome, produto):
                 continue
 
             # Preço principal (a-price com data-a-size="xl" = preço destaque)
@@ -4606,6 +4624,8 @@ def buscar_shopee(produto, valor_minimo, valor_maximo):
                 continue
             if not nome_compativel_com_busca(p['nome'], produto):
                 continue
+            if not is_produto_principal(p['nome'], produto):
+                continue
             if not (valor_minimo <= preco <= valor_maximo):
                 continue
             ofertas.append({'nome': p['nome'], 'preco': preco, 'link': p['link'], 'imagem': p.get('imagem', ''), 'loja': 'Shopee'})
@@ -4698,6 +4718,8 @@ def buscar_casas_bahia(produto, valor_minimo, valor_maximo):
 
             nome = info.get('name', pv.get('IdProduto', ''))
             if not nome_compativel_com_busca(nome, produto):
+                continue
+            if not is_produto_principal(nome, produto):
                 continue
             if not (valor_minimo <= preco <= valor_maximo):
                 continue
