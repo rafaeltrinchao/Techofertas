@@ -3328,8 +3328,8 @@ HTML_TEMPLATE = '''
                     </div>
                     <div class="layout-toggle">
                         <span class="layout-toggle-label">Visualização</span>
-                        <button id="layout-btn-compact" onclick="setLayout('compact')" title="Layout compacto em lista">&#9776; Lista</button>
                         <button id="layout-btn-default" onclick="setLayout('default')" title="Layout em grade de cards">&#9642;&#9642; Grade</button>
+                        <button id="layout-btn-compact" onclick="setLayout('compact')" title="Layout compacto em lista">&#9776; Lista</button>
                     </div>
                     <button class="btn btn-outline" onclick="resetSearch()">
                         <span>🔄</span>
@@ -3698,7 +3698,7 @@ HTML_TEMPLATE = '''
         }
 
         // ---- Layout toggle ----
-        let _currentLayout = localStorage.getItem('techofertas_layout') || 'compact';
+        let _currentLayout = localStorage.getItem('techofertas_layout') || 'default';
         let _currentResults = null; // dados da última renderização — necessário para re-renderizar ao trocar layout
 
         function setLayout(type) {
