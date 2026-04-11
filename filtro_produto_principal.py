@@ -60,6 +60,8 @@ ACESSORIOS_PALAVRAS = {
     "jogo", "game", "jogos",
     # Baterias / power banks
     "bateria", "powerbank", "power bank", "banco de energia",
+    # Identificação explícita de acessório no título
+    "acessorio", "acessorios",
     # Outros
     "skin", "adesivo", "sticker", "grip", "anel", "pop socket",
     "webcam",  # periférico
@@ -102,7 +104,7 @@ PREFIXOS_ACESSORIO = [
     r"^mica\b",
     r"^protetor\b",
     r"^protetora\b",
-    r"^kit\s+\d",           # "Kit 2 películas", "Kit 3 capas"
+    r"^kit\b",              # "Kit Viagem", "Kit 2 películas", "Kit Limpeza"
     r"^suporte\b",
     r"^stand\b",
     r"^cabo\b",
@@ -331,25 +333,29 @@ def is_produto_principal(titulo: str, query: str) -> bool:
         return titulo_comeca_com_produto  # True = produto, False = acessório do produto
 
     # ------------------------------------------------------------------
-    # PASSO 1.5: "Para [token_da_query]" / "compatível com [token]" / "p/ [token]"
+    # PASSO 1.5: "Para [...] [token_query]" / "compatível com [token]" / "p/ [token]"
     # Sinal universal de acessório em e-commerce brasileiro.
     # Fonte: ML treina vendedores a usar "para X" / "compatível com X" para acessórios.
     # Funciona para qualquer produto sem manutenção de listas:
     #   "Sleeve para MacBook Air", "Hub para MacBook Pro",
-    #   "Capa para Galaxy S24", "Suporte para Surface Pro",
-    #   "Película compatível com iPhone 15", "Cabo p/ iPad Air"
+    #   "Para Laptop PC MacBook PS4", "para iPhone 16, iPad e MacBook Air",
+    #   "Capa para Galaxy S24", "compatível com MacBooks"
+    # Nota: verifica token e plural simples (macbook → macbooks)
     # ------------------------------------------------------------------
+    _m_para = re.search(r'\bpara\b', titulo_norm)
     for qt in tokens_query:
         if len(qt) < 3:
             continue  # ignora artigos, prep., números curtos ("de", "15", "m2")
-        # "para macbook", "para o macbook", "para a iphone" etc.
-        if re.search(r'\bpara\s+(?:[oa]s?\s+)?' + re.escape(qt) + r'\b', titulo_norm):
+        # Padrão de match: token ou plural (macbook → macbooks)
+        _qt_pat = r'\b(?:' + re.escape(qt) + r'|' + re.escape(qt) + r's)\b'
+        # "para [qualquer coisa] macbook" — token da query após qualquer "para"
+        if _m_para and re.search(_qt_pat, titulo_norm[_m_para.start():]):
             return False
         # "p/ macbook", "p/iphone"
         if re.search(r'\bp\s*/\s*' + re.escape(qt) + r'\b', titulo_norm):
             return False
-        # "compatível com macbook", "compatible macbook"
-        if re.search(r'\bcompat[a-z]*\b(?:\s+com)?\s+' + re.escape(qt) + r'\b', titulo_norm):
+        # "compatível com macbook", "compatible macbook", "compatíveis macbooks"
+        if re.search(r'\bcompat[a-z]*\b(?:\s+com)?\s+' + _qt_pat, titulo_norm):
             return False
 
     # ------------------------------------------------------------------
@@ -407,10 +413,18 @@ def is_produto_principal(titulo: str, query: str) -> bool:
         palavra_acc = _contem_algum(parte_principal, _PATTERNS_ACESSORIOS)
         if palavra_acc:
             palavra_acc_norm = _normalizar(palavra_acc)
-            # Excluir: "para [acessório]" indica descrição do produto, não tipo de acessório
-            # Ex.: "Console para Jogos 4K Sony" — "para jogos" descreve o console
-            if re.search(r"\bpara\s+" + re.escape(palavra_acc_norm), parte_principal):
-                pass  # não filtrar — é descrição, não acessório
+            # Excluir: "para [atividade]" descreve o PROPÓSITO do produto principal,
+            # não indica que é um acessório físico.
+            # ✓ "Console para Jogos 4K Sony"  — "para jogos" = propósito do console
+            # ✗ "Pano de Limpeza Capa Para Teclado" — "para teclado" = acessório do teclado
+            _PALAVRAS_ATIVIDADE = {
+                "jogo", "jogos", "game", "games", "uso", "trabalho",
+                "escritorio", "estudio", "edicao", "gamers", "criadores",
+                "streaming", "multimidia",
+            }
+            if (re.search(r"\bpara\s+" + re.escape(palavra_acc_norm), parte_principal)
+                    and palavra_acc_norm in _PALAVRAS_ATIVIDADE):
+                pass  # não filtrar — é propósito do produto
             # Excluir: "capa inclusa/incluída" e "com capa" indicam bundle, não capa como produto
             elif palavra_acc_norm == "capa" and re.search(
                 r"\bcapa\s+inclu|\bcom\s+capa\b|\bacompanha\s+capa\b", parte_principal
@@ -580,6 +594,26 @@ SUITE = [
     ("notebook", "Manga Neoprene para Notebook 15.6 Preta Resistente", False),
     ("notebook", "Hub USB-C para Notebook 6 em 1 Multiporta Alumínio", False),
     ("notebook", "Cooler para Notebook 15.6 USB Silencioso Base Refrigerada", False),
+
+    # ===================================================================
+    # GRUPO 13: Correções de falsos negativos observados em produção
+    # ===================================================================
+    # "Acessórios" explícito no título
+    ("MacBook", "Protetores De Laptop Com Plugue De Silicone HDMI USB DP Para PC MacBook 10/16 Pcs Acessórios", False),
+    # "para teclado" é periférico físico, não atividade — deve filtrar
+    ("MacBook", "Pano De Limpeza À Prova De Poeira Capa Para Teclado De Notebook Laptop MacBook", False),
+    # "para [outras palavras] macbook" — token após "para" com palavras no meio
+    ("MacBook", "Estencil De Reballing BGA Para iPad Pro MacBook Air CPU M4 2024", False),
+    ("MacBook", "Disco Rígido Externo Portátil USB3.0 1TB 2TB Para Laptop PC MacBook PS4", False),
+    ("MacBook", "Kit Viagem USB-C 30W para iPhone 16 iPad e MacBook Air Originais", False),
+    # "MacBooks" (plural) deve ser capturado
+    ("MacBook", "Pendrive 2 em 1 Usb 2.0 Tipo C Para Notebook Celular Tablet MacBooks", False),
+    # "Kit" como prefixo (sem dígito)
+    ("iPhone 15", "Kit Viagem Carregador 20W Cabo USB-C para iPhone 15 Apple Original", False),
+    ("MacBook", "Kit Proteção Película Capa MacBook Air M2 13 Premium Anti-Risco", False),
+    # Garantia que produtos legítimos NÃO são afetados pelo "para" mais permissivo
+    ("MacBook", "Apple MacBook Air M2 13 256GB 8GB Meia-Noite MLXW3BZ/A", True),
+    ("MacBook", "Apple MacBook Pro 14 M3 Pro 18GB 512GB Space Black MRX33BZ/A", True),
 ]
 
 
