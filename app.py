@@ -1336,6 +1336,28 @@ HTML_TEMPLATE = '''
             vertical-align: baseline;
         }
 
+        .btn-track-search {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.25rem 0.65rem;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--primary-color);
+            background: rgba(99, 102, 241, 0.08);
+            border: 1px solid rgba(99, 102, 241, 0.25);
+            border-radius: 999px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+            font-family: inherit;
+            vertical-align: baseline;
+        }
+        .btn-track-search:hover {
+            background: rgba(99, 102, 241, 0.15);
+            border-color: var(--primary-color);
+        }
+
         /* Store Results */
         .store-results {
             display: flex;
@@ -1974,6 +1996,10 @@ HTML_TEMPLATE = '''
             .search-query-term {
                 max-width: 200px;
                 font-size: 0.875rem;
+            }
+            .btn-track-search {
+                font-size: 0.72rem;
+                padding: 0.2rem 0.5rem;
             }
 
             /* Store card — compact on phones */
@@ -3323,6 +3349,7 @@ HTML_TEMPLATE = '''
                         <div class="search-query-display" id="search-query-display" style="display:none">
                             <span class="search-query-label">Buscando por</span>
                             <span class="search-query-term" id="search-term"></span>
+                            <button class="btn-track-search" id="btn-track-search" onclick="openTrackSearchModal()" title="Acompanhar preços deste produto">👁️ Acompanhar</button>
                         </div>
                         <p class="results-count" id="total-count"></p>
                     </div>
@@ -3573,6 +3600,42 @@ HTML_TEMPLATE = '''
         </div>
     </div>
 
+    <!-- Track Search Modal -->
+    <div id="track-search-modal" class="modal-overlay" style="display:none" onclick="closeTrackSearchModal()">
+        <div class="form-modal-box" onclick="event.stopPropagation()" style="max-width:440px">
+            <button class="form-modal-close" onclick="closeTrackSearchModal()">✕</button>
+            <h3 class="form-modal-title">Acompanhar este produto?</h3>
+
+            <div id="track-search-info" style="margin-bottom:1rem">
+                <div id="track-search-nome" style="font-weight:600;color:var(--text-primary);font-size:0.95rem;line-height:1.4;margin-bottom:0.35rem"></div>
+                <div id="track-search-details" style="font-size:0.82rem;color:var(--text-secondary);line-height:1.5"></div>
+            </div>
+
+            <div class="alert-section">
+                <div class="alert-section-title">Como deseja receber alertas?</div>
+                <label class="alert-toggle" for="track-notify-lower">
+                    <span class="alert-toggle-text">Notificar quando encontrar preço mais baixo</span>
+                    <input type="checkbox" id="track-notify-lower" checked>
+                    <span class="toggle-switch"></span>
+                </label>
+                <label class="alert-toggle" for="track-notify-target">
+                    <span class="alert-toggle-text">Notificar quando atingir valor alvo</span>
+                    <input type="checkbox" id="track-notify-target">
+                    <span class="toggle-switch"></span>
+                </label>
+                <div class="alert-target-field" id="track-target-field">
+                    <label class="form-label" for="track-target-price">Valor alvo (R$)</label>
+                    <input type="number" id="track-target-price" class="form-input" placeholder="Ex: 2499.00" min="0" step="0.01">
+                </div>
+            </div>
+
+            <div style="display:flex;gap:0.75rem;margin-top:1.25rem">
+                <button class="btn btn-primary" style="flex:1" onclick="confirmTrackSearch()">Acompanhar</button>
+                <button class="btn btn-outline" onclick="closeTrackSearchModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Image Modal -->
     <div class="image-modal" id="image-modal" onclick="closeModal()">
         <div class="modal-content">
@@ -3596,6 +3659,7 @@ HTML_TEMPLATE = '''
         };
         let currentEventSource = null;
         let _lastSearchResults = {}; // accumulates store results during stream
+        let _isWatchResultsView = false; // true quando exibindo resultados de produto acompanhado
 
         // ---- session state persistence (F5 resilience) ----
         const SESSION_KEY = 'techofertas_session';
@@ -3839,6 +3903,7 @@ HTML_TEMPLATE = '''
             }
             _setBuscarBtn(false);
             _lastSearchResults = {};
+            _isWatchResultsView = false;
             _melhoresVisibleCount = MELHORES_PAGE_SIZE;
             _melhoresAllProducts = [];
             Object.keys(_storeExpanded).forEach(k => delete _storeExpanded[k]);
@@ -4331,6 +4396,7 @@ HTML_TEMPLATE = '''
                 currentEventSource.close();
                 currentEventSource = null;
             }
+            _isWatchResultsView = false;
             autoUpdatePaused = false;
             _setBuscarBtn(true);
             sessionSave({view: 'form', results: null, tab: 'buscar'});
@@ -4351,10 +4417,12 @@ HTML_TEMPLATE = '''
         }
 
         function _updateSearchTerm(produto) {
+            const trackBtn = document.getElementById('btn-track-search');
             if (produto) {
                 searchTermEl.textContent = produto;
                 searchTermEl.title = produto;
                 searchQueryDisplay.style.display = 'flex';
+                if (trackBtn) trackBtn.style.display = _isWatchResultsView ? 'none' : '';
             } else {
                 searchQueryDisplay.style.display = 'none';
             }
@@ -4417,6 +4485,7 @@ HTML_TEMPLATE = '''
                 closeAddWatchModal();
                 closeWatchConfirmModal();
                 closeRemoveConfirmModal();
+                closeTrackSearchModal();
             }
         });
 
@@ -4670,6 +4739,7 @@ HTML_TEMPLATE = '''
 
         // Display cached results in search view (same rendering as main search)
         function displayWatchResults(item, resultados) {
+            _isWatchResultsView = true;
             currentSearch.produto = item.query;
             currentSearch.valor_minimo = item.valor_minimo || 0;
             currentSearch.valor_maximo = item.valor_maximo || null;
@@ -4832,6 +4902,7 @@ HTML_TEMPLATE = '''
 
         function _updateWatchStream(id, item) {
             // Switch to search tab with streaming UI
+            _isWatchResultsView = true;
             _activeTab = 'buscar';
             document.getElementById('tab-buscar').classList.add('active');
             document.getElementById('tab-watchlist').classList.remove('active');
@@ -5059,6 +5130,93 @@ HTML_TEMPLATE = '''
                     watchlistData = d.items || [];
                     updateWatchlistBadge();
                 });
+            })
+            .catch(() => showNotification('Erro ao adicionar.', 'error'));
+        }
+
+        // ── Track Search (acompanhar pesquisa a partir dos resultados) ──
+
+        function openTrackSearchModal() {
+            const nome = currentSearch.produto;
+            if (!nome) return;
+
+            // Preenche info
+            document.getElementById('track-search-nome').textContent = nome;
+
+            const lojas = Object.entries(currentSearch.stores)
+                .filter(([,v]) => v)
+                .map(([k]) => getStoreDisplayName(k));
+            const vmin = currentSearch.valor_minimo || 0;
+            const vmax = currentSearch.valor_maximo;
+            let details = `Lojas: ${lojas.join(', ')}`;
+            if (vmin > 0 || vmax) {
+                details += `\nFiltro: `;
+                if (vmin > 0) details += `mín R$ ${vmin.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+                if (vmin > 0 && vmax) details += ' · ';
+                if (vmax) details += `máx R$ ${vmax.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+            }
+            document.getElementById('track-search-details').textContent = details;
+
+            // Reset alertas
+            document.getElementById('track-notify-lower').checked = true;
+            document.getElementById('track-notify-target').checked = false;
+            document.getElementById('track-target-price').value = '';
+            initAlertToggles('track-');
+
+            document.getElementById('track-search-modal').style.display = 'flex';
+        }
+
+        function closeTrackSearchModal() {
+            document.getElementById('track-search-modal').style.display = 'none';
+        }
+
+        function confirmTrackSearch() {
+            const query = currentSearch.produto;
+            if (!query) return;
+
+            const lojas = {};
+            Object.entries(currentSearch.stores).forEach(([k, v]) => { lojas[k] = !!v; });
+
+            const notifyLower = document.getElementById('track-notify-lower').checked;
+            const notifyTarget = document.getElementById('track-notify-target').checked;
+            const targetPrice = document.getElementById('track-target-price').value;
+
+            closeTrackSearchModal();
+
+            fetch('/watchlist', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    query,
+                    lojas,
+                    valor_minimo: currentSearch.valor_minimo || 0,
+                    valor_maximo: currentSearch.valor_maximo || null,
+                    notificar_preco_baixo: notifyLower,
+                    notificar_valor_alvo: notifyTarget && targetPrice ? parseFloat(targetPrice) : null
+                }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.erro) { showNotification(data.erro, 'error'); return; }
+                if (data.duplicate) {
+                    showNotification(`"${query}" já está sendo acompanhado.`, 'info');
+                } else {
+                    showNotification(`"${query}" adicionado ao acompanhamento!`, 'success');
+                    // Esconde o botão — agora é um produto acompanhado
+                    const btn = document.getElementById('btn-track-search');
+                    if (btn) btn.style.display = 'none';
+                    // Salva resultados no cache do novo item para acesso imediato
+                    const newId = data.item && data.item.id;
+                    if (newId && _lastSearchResults && Object.keys(_lastSearchResults).length > 0) {
+                        wlCacheSave(newId, _lastSearchResults);
+                    }
+                    // Atualiza watchlist
+                    fetch('/watchlist').then(r => r.json()).then(d => {
+                        watchlistData = d.items || [];
+                        updateWatchlistBadge();
+                        if (newId) setTimeout(() => updateWatchItem(newId), 300);
+                    });
+                }
             })
             .catch(() => showNotification('Erro ao adicionar.', 'error'));
         }
