@@ -1611,6 +1611,7 @@ HTML_TEMPLATE = '''
             text-align: center;
             padding: 3rem 1rem;
             color: var(--text-secondary);
+            grid-column: 1 / -1;
         }
 
         .empty-icon {
@@ -2480,6 +2481,201 @@ HTML_TEMPLATE = '''
             .compact-header-row { display: none; }
         }
 
+        /* ═══════════════════════════════════════════════════════════
+           E-COMMERCE GRID CARD LAYOUT
+           ═══════════════════════════════════════════════════════════ */
+
+        .products-grid.grid-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+            gap: 0.875rem;
+            padding: 1rem;
+        }
+
+        .product-card.grid-card {
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            background: var(--surface);
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+            position: relative;
+            height: 100%;
+            text-align: left;
+            gap: 0;
+        }
+        .product-card.grid-card:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 8px 25px -5px rgb(0 0 0 / 0.1), 0 4px 10px -6px rgb(0 0 0 / 0.08);
+            transform: translateY(-3px);
+        }
+        [data-theme="dark"] .product-card.grid-card:hover {
+            box-shadow: 0 8px 25px -5px rgb(0 0 0 / 0.4), 0 4px 10px -6px rgb(0 0 0 / 0.3);
+        }
+
+        /* Image */
+        .grid-card .grid-card-image-wrap {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background: #f8fafc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-bottom: 1px solid var(--border);
+            overflow: hidden;
+            cursor: pointer;
+        }
+        [data-theme="dark"] .grid-card .grid-card-image-wrap {
+            background: #0f172a;
+        }
+        .grid-card .grid-card-image-wrap img {
+            max-width: 80%;
+            max-height: 80%;
+            object-fit: contain;
+            transition: transform 0.3s ease;
+        }
+        .grid-card:hover .grid-card-image-wrap img {
+            transform: scale(1.05);
+        }
+
+        /* Card Body */
+        .grid-card .grid-card-body {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            padding: 0.75rem;
+            gap: 0.3rem;
+        }
+
+        /* Store */
+        .grid-card .grid-card-store {
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            letter-spacing: 0.02em;
+            text-transform: uppercase;
+        }
+
+        /* Product Name */
+        .grid-card .grid-card-name {
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            line-height: 1.35;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-height: 2.3em;
+        }
+
+        /* Price Label */
+        .grid-card .grid-card-price-label {
+            font-size: 0.63rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-top: 0.2rem;
+            margin-bottom: -0.1rem;
+        }
+
+        /* Price */
+        .grid-card .grid-card-price {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--success-color);
+            line-height: 1.2;
+        }
+
+        /* Installment */
+        .grid-card .grid-card-installment {
+            font-size: 0.73rem;
+            color: var(--text-secondary);
+            line-height: 1.3;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            flex-wrap: wrap;
+        }
+        .grid-card .grid-card-installment .badge-sem-juros,
+        .grid-card .grid-card-installment .badge-com-juros,
+        .grid-card .grid-card-installment .badge-melhor-compra {
+            font-size: 0.63rem;
+            padding: 0.1rem 0.35rem;
+        }
+
+        /* Actions */
+        .grid-card .grid-card-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            margin-top: auto;
+            padding-top: 0.5rem;
+        }
+        .grid-card .grid-card-actions .btn {
+            width: 100%;
+            text-align: center;
+            justify-content: center;
+            font-size: 0.78rem;
+            padding: 0.45rem 0.75rem;
+            border-radius: var(--radius-md);
+        }
+        .grid-card .grid-card-actions .btn-watch {
+            width: 100%;
+            text-align: center;
+            justify-content: center;
+            font-size: 0.73rem;
+            padding: 0.35rem 0.75rem;
+            background: transparent;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s ease;
+            font-family: inherit;
+        }
+        .grid-card .grid-card-actions .btn-watch:hover {
+            border-color: var(--primary-color);
+            color: var(--primary-color);
+            background: rgb(37 99 235 / 0.05);
+        }
+
+        /* Grid Cards Responsive */
+        @media (max-width: 768px) {
+            .products-grid.grid-cards {
+                gap: 0.75rem;
+                padding: 0.75rem;
+            }
+            .grid-card .grid-card-name { font-size: 0.8rem; }
+            .grid-card .grid-card-price { font-size: 1.1rem; }
+        }
+        @media (max-width: 480px) {
+            .products-grid.grid-cards {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 0.5rem;
+                padding: 0.5rem;
+            }
+            .grid-card .grid-card-body { padding: 0.5rem; gap: 0.2rem; }
+            .grid-card .grid-card-name { font-size: 0.74rem; min-height: 2em; }
+            .grid-card .grid-card-price { font-size: 1rem; }
+            .grid-card .grid-card-price-label { font-size: 0.58rem; }
+            .grid-card .grid-card-installment { font-size: 0.66rem; }
+            .grid-card .grid-card-actions .btn { font-size: 0.73rem; padding: 0.4rem 0.5rem; }
+            .grid-card .grid-card-actions .btn-watch { font-size: 0.66rem; padding: 0.3rem 0.5rem; }
+            .product-card.grid-card:hover { transform: none; }
+        }
+        @media (max-width: 380px) {
+            .products-grid.grid-cards { gap: 0.35rem; padding: 0.35rem; }
+            .grid-card .grid-card-body { padding: 0.4rem; }
+            .grid-card .grid-card-store { display: none; }
+            .grid-card .grid-card-installment { font-size: 0.6rem; }
+        }
+
         /* Watchlist empty */
         .watchlist-empty { text-align: center; padding: 4rem 2rem; color: var(--text-secondary); }
         .watchlist-empty .empty-icon { font-size: 3rem; opacity: 0.35; margin-bottom: 1rem; }
@@ -3133,7 +3329,7 @@ HTML_TEMPLATE = '''
                     <div class="layout-toggle">
                         <span class="layout-toggle-label">Visualização</span>
                         <button id="layout-btn-compact" onclick="setLayout('compact')" title="Layout compacto em lista">&#9776; Lista</button>
-                        <button id="layout-btn-default" onclick="setLayout('default')" title="Layout em cards">&#9638; Cards</button>
+                        <button id="layout-btn-default" onclick="setLayout('default')" title="Layout em grade de cards">&#9642;&#9642; Grade</button>
                     </div>
                     <button class="btn btn-outline" onclick="resetSearch()">
                         <span>🔄</span>
@@ -3948,7 +4144,7 @@ HTML_TEMPLATE = '''
                         </button>
                     </div>
                     <div class="store-content" id="content-${storeId}">
-                        <div class="products-grid${_currentLayout === 'compact' ? ' compact' : ''}" id="grid-${storeId}">
+                        <div class="products-grid${_currentLayout === 'compact' ? ' compact' : ' grid-cards'}" id="grid-${storeId}">
                             ${_currentLayout === 'compact' ? '<div class="compact-header-row"><span></span><span>Produto</span><span>Preço</span><span>Parcelamento</span><span></span></div>' : ''}
                             ${hasProducts ? displayProducts.map(product => _currentLayout === 'compact' ? createProductCardCompact(product) : createProductCard(product)).join('') : createEmptyState(storeType)}
                         </div>
@@ -4012,35 +4208,33 @@ HTML_TEMPLATE = '''
             const installmentHTML = product.parcelamento ? (() => {
                 const p = product.parcelamento;
                 const val = p.valor.toLocaleString('pt-BR', {minimumFractionDigits: 2});
-                const totalNum = p.parcelas * p.valor;
-                const total = totalNum.toLocaleString('pt-BR', {minimumFractionDigits: 2});
                 const badge = p.sem_juros
                     ? '<span class="badge-sem-juros">sem juros</span>'
                     : '<span class="badge-com-juros">com juros</span>';
-                const melhorCompra = (p.sem_juros && Math.abs(totalNum - product.preco) < 0.02)
-                    ? ' <span class="badge-melhor-compra">mesmo preço à vista</span>'
-                    : '';
-                return `<div class="product-installment">💳 R$ ${total} &nbsp;·&nbsp; ${p.parcelas}x de R$ ${val} ${badge}${melhorCompra}</div>`;
+                return `<div class="grid-card-installment">${p.parcelas}x R$ ${val} ${badge}</div>`;
             })() : '';
 
+            const storeHTML = product.loja
+                ? `<div class="grid-card-store">${getStoreDisplayName(product.loja)}</div>`
+                : '';
+
             return `
-                <div class="product-card">
-                    ${product.imagem ? `
-                        <img src="${product.imagem}" alt="${product.nome}" class="product-image" onclick="openImageModal('${product.imagem}')">
-                    ` : ''}
-                    <div class="product-details">
-                        <h4 class="product-name">${product.nome}</h4>
-                        ${product.loja ? `<div class="product-store">${getStoreDisplayName(product.loja)}</div>` : ''}
-                        <div>
-                            <div class="product-price-label">à vista</div>
-                            <div class="product-price">R$ ${product.preco.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
-                        </div>
+                <div class="product-card grid-card">
+                    <div class="grid-card-image-wrap" onclick="openImageModal('${product.imagem || ''}')">
+                        ${product.imagem
+                            ? `<img src="${product.imagem}" alt="${escHtml(product.nome)}" loading="lazy">`
+                            : `<span style="font-size:2.5rem;opacity:0.3">📦</span>`
+                        }
+                    </div>
+                    <div class="grid-card-body">
+                        ${storeHTML}
+                        <div class="grid-card-name" title="${escHtml(product.nome)}">${escHtml(product.nome)}</div>
+                        <div class="grid-card-price-label">à vista</div>
+                        <div class="grid-card-price">R$ ${product.preco.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>
                         ${installmentHTML}
-                        <div class="product-actions">
-                            <button class="btn btn-primary btn-sm" onclick="openProduct('${product.link}')">
-                                Ver Produto
-                            </button>
-                            <button class="btn-watch" onclick='openWatchConfirmModal(${wcId})'>👁️ Acompanhar preço</button>
+                        <div class="grid-card-actions">
+                            <button class="btn btn-primary btn-sm" onclick="openProduct('${product.link}')">Ver Produto</button>
+                            <button class="btn-watch" onclick='openWatchConfirmModal(${wcId})'>👁️ Acompanhar</button>
                         </div>
                     </div>
                 </div>
